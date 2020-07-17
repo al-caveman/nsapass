@@ -19,7 +19,7 @@ import secrets
 #######################################
 
 # location of encrypted passwords db
-DB = os.path.expanduser('~/.config/nsapass/db.enc')
+DB = os.path.expanduser('~/.local/share/nsapass/db.enc')
 
 # how many seconds should copied passwords remain in the clipboard?
 COPYLIFE = 5
