@@ -97,7 +97,7 @@ def print_entry(name, i, section, d):
         try:
             names = sorted(d[section])
         except KeyError:
-            print_err('section "{}" not found in db.'.format( section))
+            print_err('section "{}" not found in db.'.format(section))
             print_err('exiting...')
             sys.exit(1)
     else:
@@ -130,14 +130,14 @@ def print_entry(name, i, section, d):
                     note = d[section][n][j][KEY_NOTE]
                 else:
                     note = textwrap.fill(d[section][n][j][KEY_NOTE],
-                    initial_indent=indent, subsequent_indent=indent)
+                        initial_indent=indent, subsequent_indent=indent)
             except (KeyError, IndexError):
                 print_err('"{}/{}/{}" not found.'.format(section, n, j))
                 print_err('exiting...')
                 sys.exit(1)
             if SHOW_PASSWORDS:
                 print('        {}  {P}{}{CLR}'.format(index, password,
-                **THEME))
+                    **THEME))
             else:
                 print('        {}  {}'.format(index, password))
             if note is not None:
