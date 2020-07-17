@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# nsapass  Copyright (C) <2020>  <caveman>
+# licensed under GPLv3 for details read LICENSE in
+# https://github.com/al-caveman/nsapass
 import argparse
 import os
 import sys

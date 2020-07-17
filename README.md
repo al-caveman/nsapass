@@ -46,7 +46,7 @@ Shell, Objective-C++, etc. extreme complexity!
     <img src="https://github.com/Al-Caveman/nsapass/blob/master/pics/comparision.png">
 </p>
 
-how can _you_ know that funny memory bugs don't exit in `keepassxc`!?
+how can _you_ know that funny memory bugs don't exist in `keepassxc`!?
 would _you_ put _faith_ in keepassxc's devs that their app is free of
 segfaults?  _no way!_ no thanks sir! _keep_ your keepass to yourself.
 i'm going to rather rely on the _many_ highly skilled monkeys at _python_
@@ -81,7 +81,7 @@ help from the subcommands by, say, `nsapass get -h`.
 # message from founder
 despite _all_ my engineering excellence and finesse, i'm still a maximally
 humble and a down-to-earth guy.  so, if you like some features, i'd like to
-see your patch.  if they are sensible i'll merge them.  if i like your
+see your patch.  if they it is sensible i'll merge it.  if i like your
 idea, i may even implemented it _myself_, by my very own hands, for _free_
-and _git commit-pull-merge-push_ them or me _and_ for you!  because i also
+and _git commit-pull-merge-push_ it or me _and_ for you!  because i also
 care about _you_ and i want _you_ to be happy as well.
