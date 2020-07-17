@@ -155,12 +155,19 @@ def cmd(cmd, stdin=None, stdout=subprocess.PIPE):
 def load():
     print_info('loading db...')
     data = cmd(DECCMD)
-    return json.loads(data)
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError:
+        print_err('error decoding database "{}"'.format(DB))
+        print_err('delete that file if you want to create a new database')
+        print_err('exiting...')
+        sys.exit(1)
 
 def save(d):
     print_info('saving db...')
     data = json.dumps(d, indent=4)
     cmd(ENCCMD, stdin=data.encode())
+    # TODO: replace the file atomically -- unless scrypt does that for us?
 
 def parse_index(index):
     try:
