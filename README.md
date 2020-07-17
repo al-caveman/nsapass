@@ -75,7 +75,7 @@ help from the subcommands by, say, `nsapass get -h`.
 # dependencies
 
 - python.
-- any encryption/decription app (by default `script`).
+- any encription/decription app (by default `script`).
 - any clipboard management app (by default `xclip`).
 
 # message from founder
