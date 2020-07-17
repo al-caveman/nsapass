@@ -317,7 +317,6 @@ p_get = subparsers.add_parser('get', help="load a password to clipboard")
 p_get.add_argument('name', metavar='NAME', type=str, help="a username")
 p_get.add_argument('index', metavar='INDEX', type=str, nargs='?',
                     help="password index.  default '0'.")
-p_get.add_argument('-p', action='store_true', help="show passwords")
 # add
 p_add = subparsers.add_parser('add', help="add a password entry")
 p_add.add_argument('name', metavar='NAME', type=str, help="a username")
@@ -334,7 +333,6 @@ p_gen.add_argument('set', metavar='SET', type=str,
                     " SETS)")
 p_gen.add_argument('note', metavar='NOTE', type=str, nargs='?',
                     help="a note")
-p_gen.add_argument('-p', action='store_true', help="show passwords")
 # del
 p_del = subparsers.add_parser('del', help="delete a password entry")
 p_del.add_argument('name', metavar='NAME', type=str, help="a username")
@@ -358,7 +356,6 @@ p_mod.add_argument('-c', metavar='NEWNOTE', type=str,
                     help="a new note")
 # list
 p_list = subparsers.add_parser('list', help="list passwords entries")
-p_list.add_argument('-p', action='store_true', help="show passwords")
 p_list.add_argument('-a', action='store_true', help="show archive")
 # changepass
 p_changepass = subparsers.add_parser('changepass', help="change"
@@ -396,7 +393,7 @@ try:
     elif args.command == 'mod':
         nsa_mod(args.name, args.index, args.n, args.p, args.c)
     elif args.command == 'list':
-        nsa_list(args.p, args.a)
+        nsa_list(args.a)
     elif args.command == 'changepass':
         nsa_changepass()
 except KeyboardInterrupt:
