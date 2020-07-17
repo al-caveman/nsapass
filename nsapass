@@ -11,6 +11,7 @@ import subprocess
 import textwrap
 import time
 import secrets
+import tempfile
 
 #######################################
 #                                     #
@@ -39,7 +40,7 @@ SETS = {
 DECCMD = ['scrypt', 'dec', DB]
 
 # command to save passwords db (must read plaintext from stdin)
-ENCCMD = ['scrypt', 'enc', '-', DB]
+ENCCMD = ['scrypt', 'enc', '-', '{}']
 
 # command to paste into clipboard (must accept data from stdin)
 CLIPCMD = ['xclip', '-selection', 'clipboard']
@@ -166,8 +167,16 @@ def load():
 def save(d):
     print_info('saving db...')
     data = json.dumps(d, indent=4)
-    cmd(ENCCMD, stdin=data.encode())
-    # TODO: replace the file atomically -- unless scrypt does that for us?
+    tempDB = tempfile.NamedTemporaryFile(prefix=DB, delete=False)
+    delete = True
+    try:
+        cmd([p.format(tempDB.name) for p in ENCCMD], stdin=data.encode())
+        os.rename(tempDB.name, DB)
+        delete = False
+    finally:
+        if delete:
+            os.unlink(tempDB.name)
+        tempDB.close()
 
 def parse_index(index):
     try:
