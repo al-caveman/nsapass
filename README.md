@@ -82,8 +82,10 @@ help from the subcommands by, say, `nsapass get -h`.
 # dependencies
 
 - python.
-- any encryption/decription app (by default `script`).
-- any clipboard management app (by default `xclip`).
+- any encryption/decription app (by default
+  [`scrypt`](https://github.com/Tarsnap/scrypt)).
+- any clipboard management app (by default
+  [`xclip`](https://github.com/astrand/xclip)).
 
 # message from founder
 despite _all_ my engineering excellence and finesse, i'm still a maximally
