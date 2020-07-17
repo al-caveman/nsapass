@@ -37,6 +37,13 @@ reasons:
   encryption/decription app of your choice which you use (by default
   `scrypt`).
 
+- **looks pretty:**  look at the beautiful colors!
+
+<p align="center">
+    <img
+    src="https://github.com/Al-Caveman/nsapass/blob/master/pics/screenshot.png">
+</p>
+
 # alternatives to `nsapass`
 i didn't use much alternatives, but recently i've been using `keepassxc`.
 it sucks, because, look at their github page.  loads of C++, CMake, C,
