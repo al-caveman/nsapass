@@ -11,7 +11,6 @@ import subprocess
 import textwrap
 import time
 import secrets
-import tempfile
 import atexit
 
 #######################################
@@ -23,6 +22,7 @@ import atexit
 # location of encrypted passwords db
 DB = os.path.expanduser('~/.local/share/nsapass/db.enc')
 DBLOCK = DB + '.lock'
+DBTEMP = DB + '.temp'  # should be in the same directory as DB
 
 # how many seconds should copied passwords remain in the clipboard?
 COPYLIFE = 5
@@ -42,7 +42,7 @@ SETS = {
 DECCMD = ['scrypt', 'dec', DB]
 
 # command to save passwords db (must read plaintext from stdin)
-ENCCMD = ['scrypt', 'enc', '-', '{}']
+ENCCMD = ['scrypt', 'enc', '-', DBTEMP]
 
 # command to paste into clipboard (must accept data from stdin)
 CLIPCMD = ['xclip', '-selection', 'clipboard']
@@ -187,16 +187,14 @@ def load(lock=False):
 def save(d):
     print_info('saving db...')
     data = json.dumps(d, indent=4)
-    tempDB = tempfile.NamedTemporaryFile(prefix=DB, delete=False)
-    delete = True
     try:
-        cmd([p.format(tempDB.name) for p in ENCCMD], stdin=data.encode())
-        os.rename(tempDB.name, DB)
-        delete = False
+        cmd(ENCCMD, stdin=data.encode())
+        os.rename(DBTEMP, DB)
     finally:
-        if delete:
-            os.unlink(tempDB.name)
-        tempDB.close()
+        try:
+            os.unlink(DBTEMP)
+        except FileNotFoundError:
+            pass
 
 def parse_index(index):
     try:
