@@ -12,6 +12,7 @@ import textwrap
 import time
 import secrets
 import tempfile
+import atexit
 
 #######################################
 #                                     #
@@ -21,6 +22,7 @@ import tempfile
 
 # location of encrypted passwords db
 DB = os.path.expanduser('~/.local/share/nsapass/db.enc')
+DBLOCK = DB + '.lock'
 
 # how many seconds should copied passwords remain in the clipboard?
 COPYLIFE = 5
@@ -153,7 +155,25 @@ def cmd(cmd, stdin=None, stdout=subprocess.PIPE):
         sys.exit(1)
     return c.stdout
 
-def load():
+def load(lock=False):
+    if lock:
+        dirname = os.path.dirname(DBLOCK)
+        os.makedirs(dirname, exist_ok=True)
+        try:
+            open(DBLOCK, 'xb').close()
+        except FileExistsError:
+            print_err('lock file "{}" already exists'.format(DBLOCK))
+            print_err('if no other instances of "nsapass" are running '
+                'remove the lock file manually')
+            print_err('exiting...')
+            sys.exit(1)
+        atexit.register(os.unlink, DBLOCK)
+    if not os.path.exists(DB):
+        print_warn('passwords db "{}" not found.'.format(DB))
+        print_warn('creating new...')
+        dirname = os.path.dirname(DB)
+        os.makedirs(dirname, exist_ok=True)
+        return {SECTION_ENTRIES:{}, SECTION_ARCHIVE:{}}
     print_info('loading db...')
     data = cmd(DECCMD)
     try:
@@ -212,15 +232,8 @@ def nsa_get(name, index):
     cmd(CLIPCMD, stdin=COPYDEL.encode(), stdout=None)
 
 def nsa_add(name, password, note, d=None, save_d=True):
-    if os.path.exists(DB):
-        if d is None:
-            d = load()
-    else:
-        print_warn('passwords db "{}" not found.'.format(DB))
-        print_warn('creating new...')
-        dirname = os.path.dirname(DB)
-        os.makedirs(dirname, exist_ok=True)
-        d = {SECTION_ENTRIES:{}, SECTION_ARCHIVE:{}}
+    if d is None:
+        d = load(lock=True)
     print_info('adding entry...')
     entry = {KEY_PASS:password, KEY_NOTE:note}
     if name in d[SECTION_ENTRIES]:
@@ -267,7 +280,7 @@ def nsa_del(name, index, d=None, save_d=True):
         print_err('exiting...')
         sys.exit(1)
     if d is None:
-        d = load()
+        d = load(lock=True)
     print_info('deleting entry...')
     print_entry(name, i, section, d)
     if section == SECTION_ENTRIES:
@@ -291,7 +304,7 @@ def nsa_undel(name, index):
         i))
         print_err('exiting...')
         sys.exit(1)
-    d = load()
+    d = load(lock=True)
     password = d[section][name][i][KEY_PASS]
     note = d[section][name][i][KEY_NOTE]
     nsa_add(name, password, note, d=d, save_d=False)
@@ -300,7 +313,7 @@ def nsa_undel(name, index):
 
 def nsa_mod(name, index, new_name, new_pass, new_note):
     i, section = parse_index(index)
-    d = load()
+    d = load(lock=True)
     if new_name is None:
         new_name = name
     if new_pass is None:
@@ -322,7 +335,7 @@ def nsa_list(show_archive):
         print_entry(None, None, SECTION_ARCHIVE, d)
 
 def nsa_changepass():
-    d = load()
+    d = load(lock=True)
     save(d)
 
 # parse arguments
