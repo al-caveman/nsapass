@@ -447,62 +447,53 @@ def chpass():
     save(db)
 
 # parse arguments
-# format of these lists is that each element is made of 2 items.  the 1st
-# item is a list (containing positional arguments).  the 2nd item is a
-# dictionary (containing named arguments)
+# commands are specified by their name, list of command arguments, and
+# extra named arguments for `add_parser`.
+# arguments are specified by their named arguments to `add_argument`.
+# 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
-    [['get'], {'help':'load a password to clipboard'}],
-    [['add'], {'help':'add an entry'}],
-    [['del'], {'help':'delete an entry'}],
-    [['undel'], {'help':'delete an entry'}],
-    [['mod'], {'help':'modify an entry'}],
-    [['view'], {'help':'view entries'}],
-    [['chpass'], {'help':"change databases's password"}]
+    ['get', ['username','index','-z'],
+     {'help':'load a password to clipboard'}],
+    ['add', ['-a','-z','PASSWORD','-u','-i','-n'],
+     {'help':'add an entry'}],
+    ['del', ['username','index','-z'],
+     {'help':'delete an entry'}],
+    ['undel', ['username','index','-z'],
+     {'help':'delete an entry'}],
+    ['mod', ['username','index','-z','PASSWORD','-u','-i','-n'],
+     {'help':'modify an entry'}],
+    ['view', ['-a','-z'],
+     {'help':'view entries'}],
+    ['chpass', [],
+     {'help':"change databases's password"}]
 ]
-allargs = [
-    [['username'],
+allargs = {
+    'username':
         {'metavar':'USERNAME', 'type':str, 'nargs':'?',
-            'help':'query a username'}],
-    [['index'],
+            'help':'query a username'},
+    'index':
         {'metavar':'INDEX', 'type':int, 'nargs':'?',
-            'help':"query by entry's position"}],
-    [['-a'], {'action':'store_true', 'help':'work on the archive'}],
-    [['-z'], {'action':'store_true', 'help':'show passwords'}],
-    [['PASSWORD'], None],
-    [['-u'], {'metavar':'USERNAME', 'type':str, 'help':'new username'}],
-    [['-i'], {'metavar':'INDEX', 'type':int, 'help':'new index'}],
-    [['-n'], {'metavar':'NOTE', 'type':str, 'help':'new note'}],
-]
+            'help':"query by entry's position"},
+    '-a': {'action':'store_true', 'help':'work on the archive'},
+    '-z': {'action':'store_true', 'help':'show passwords'},
+    '-u': {'metavar':'USERNAME', 'type':str, 'help':'new username'},
+    '-i': {'metavar':'INDEX', 'type':int, 'help':'new index'},
+    '-n': {'metavar':'NOTE', 'type':str, 'help':'new note'},
+}
 parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers(title='commands', dest='command')
-for cmd_pos, cmd_named in allcmds :
-    subp = subparsers.add_parser(*cmd_pos, **cmd_named)
-    for arg_pos, arg_named in allargs:
-        if arg_pos[0] == '-a': 
-            if cmd_pos[0] in {'get', 'add', 'view'}:
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] == '-b': 
-            if cmd_pos[0] not in {'view', 'chpass'}:
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] == '-z': 
-            if cmd_pos[0] != 'chpass':
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] in {'username', 'index'}: 
-            if cmd_pos[0] not in {'add', 'view', 'chpass'}:
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] == 'PASSWORD':
-            if cmd_pos[0] in {'add', 'mod'}:
-                muex = subp.add_mutually_exclusive_group()
-                muex.add_argument('-g', metavar=('LEN', 'SET'),
-                    nargs=2, type=str,
-                    help='generate a new LEN-long password from SET')
-                muex.add_argument('-m', action='store_true',
-                    help='manually define password')
-        elif arg_pos[0] in {'-u', '-i', '-n'}:
-            if cmd_pos[0] in {'add', 'mod'}:
-                subp.add_argument(*arg_pos, **arg_named)
+for cmd_name, cmd_args, cmd_named in allcmds :
+    subp = subparsers.add_parser(cmd_name, **cmd_named)
+    for arg in cmd_args:
+        if arg == 'PASSWORD':
+            muex = subp.add_mutually_exclusive_group()
+            muex.add_argument('-g', metavar=('LEN', 'SET'),
+                nargs=2, type=str,
+                help='generate a new LEN-long password from SET')
+            muex.add_argument('-m', action='store_true',
+                help='manually define password')
         else:
-            printerr('ldap://db.nsa.gov/{} timed out'.format(arg_pos[0]))
+            subp.add_argument(arg, **allargs[arg])
 args = parser.parse_args()
 
 # dispatcher
