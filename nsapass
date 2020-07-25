@@ -61,7 +61,7 @@ THEME = {
     'WARN' : '\33[1;33m',
     'ERR' : '\33[1;31m',
     'CLR' : '\33[0m',
-    'P' : '\33[0;41m', # passwords color
+    'PASS' : '\33[0;41m', # passwords color
     'PROMPT' : '\33[0;34m',
     'KEY' : '\33[0;90m',
     'ARC' : '\33[1;31m', # true archived flag
@@ -122,7 +122,7 @@ def printentry(db, username, index, showpass, showarc=True):
         else:
             indexes = [index]
         for i in indexes:
-            note = db[u][i][KEY_NOTE] 
+            note = db[u][i][KEY_NOTE]
             archived = db[u][i][KEY_ARC]
             if archived:
                 arcfmt = '{ARC}{}{CLR}'.format(archived, **THEME)
@@ -131,7 +131,7 @@ def printentry(db, username, index, showpass, showarc=True):
             else:
                 arcfmt = '{NOTARC}{}{CLR}'.format(archived, **THEME)
             if showpass:
-                password = '{P}{}{CLR}'.format(
+                password = '{PASS}{}{CLR}'.format(
                     db[u][i][KEY_PASS], **THEME)
             else:
                 password = '**********'
@@ -172,7 +172,7 @@ def ask(question, minimum=None, options=None, default=None,
             printwarn('options: {}'.format(', '.join(options)))
         elif required and ans == '':
             printwarn('sorry, this field is required'.format(ans))
-        elif minimum is not None: 
+        elif minimum is not None:
             try:
                 ans = int(ans)
                 if ans < minimum:
@@ -221,7 +221,7 @@ def genpass(gen, showpass):
     while True:
         password = ''.join(secrets.choice(pset) for i in range(0, length))
         if showpass:
-            printout('{P}{}{CLR}'.format(password, **THEME))
+            printout('{PASS}{}{CLR}'.format(password, **THEME))
             ans = ask('happy?', options=['y', 'n'], default='n')
             if ans == 'y':
                 break
@@ -229,7 +229,7 @@ def genpass(gen, showpass):
             break
     return password
 
-def checkquery(db, username, index):
+def checkquery(db, username, index, arc=None):
     """checks if supplied query (username, index) exists in the database
     db.  in case it doesnt't, it tries to guesses sensibly (by guessing
     nearest match, or by prompting for correction).  if no sensible guess
@@ -239,16 +239,19 @@ def checkquery(db, username, index):
     if len(db) == 0:
         printerr('databse is empty')
     usernames = list(db)
+    if arc is not None: # filter users without relevant entries
+        usernames = [u for u in usernames
+            if len([() for user in db[u] if user[KEY_ARC] == arc]) > 0]
     if username is None:
         if len(usernames) == 1:
             printwarn('only "{}" in db.  '
-                "you must've wanted him.  got it!".format(usernames[0]))
+                "you must've wanted this one.  got it!".format(usernames[0]))
             username = usernames[0]
         else:
             username = ask('query username:', options=usernames)
     elif username not in db:
         matches = []
-        for u in db:
+        for u in usernames:
             start = u.find(username)
             if start == 0:
                 matches.append(u)
@@ -261,12 +264,13 @@ def checkquery(db, username, index):
             printwarn('our guesses: {}'.format(', '.join(matches)))
             username = ask('query username:', options=usernames)
     if index is None:
-        indexes=[str(i) for i in range(0, len(db[username]))]
+        indexes=[str(i) for i in range(0, len(db[username]))
+            if arc is None or db[username][i][KEY_ARC] == arc]
         if len(indexes) == 1:
             printwarn('only a single index for "{}" in db'.format(
                 username))
             printwarn("you must've wanted it.  got it!")
-            index = 0
+            index = int(indexes[0])
         else:
             index = ask('query index:', options=indexes)
             index = int(index)
@@ -311,7 +315,7 @@ def load(lock=True):
             open(lockDB, 'xb').close()
         except FileExistsError:
             printerr('lock file "{}" exists'.format(lockDB), exit=False)
-            printerr('deleted it if no nsapass is running')
+            printerr('delete it if no nsapass is running')
         atexit.register(os.unlink, lockDB)
     if not os.path.exists(DB):
         printwarn('"{}" not found.'.format(DB))
@@ -340,10 +344,10 @@ def save(d):
         except FileNotFoundError:
             pass
 
-def get(username, index, showpass):
+def get(username, index, arc, showpass):
     """get a password entry and store it in clipboard"""
     db = load(lock=False)
-    username, index = checkquery(db, username, index)
+    username, index = checkquery(db, username, index, arc=arc)
     printinfo('entry to copy:')
     printentry(db, username, index, showpass)
     printinfo('copying password...')
@@ -399,7 +403,7 @@ def undelete(username, index, showpass):
     """undelete a password entry from the databases.  this removes the
     archive flag"""
     db = load()
-    username, index = checkquery(db, username, index)
+    username, index = checkquery(db, username, index, arc=True)
     printinfo('undeleting entry...')
     printentry(db, username, index, showpass)
     if not db[username][index][KEY_ARC]:
@@ -427,8 +431,8 @@ def modify(username, index, new_username, new_index, gen, manual, note,
          note = db[username][index][KEY_NOTE]
     arc = db[username][index][KEY_ARC]
     # case where entry will be gone, and indexes may shift.  so we may need
-    # to adjust new_index if so 
-    if arc: 
+    # to adjust new_index if so
+    if arc:
         if new_index > index:
             new_index -= 1
     delete(username, index, showpass, db=db, save_db=False)
@@ -447,62 +451,53 @@ def chpass():
     save(db)
 
 # parse arguments
-# format of these lists is that each element is made of 2 items.  the 1st
-# item is a list (containing positional arguments).  the 2nd item is a
-# dictionary (containing named arguments)
+# commands are specified by their name, list of command arguments, and
+# extra named arguments for `add_parser`.
+# arguments are specified by their named arguments to `add_argument`.
+# 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
-    [['get'], {'help':'load a password to clipboard'}],
-    [['add'], {'help':'add an entry'}],
-    [['del'], {'help':'delete an entry'}],
-    [['undel'], {'help':'delete an entry'}],
-    [['mod'], {'help':'modify an entry'}],
-    [['view'], {'help':'view entries'}],
-    [['chpass'], {'help':"change databases's password"}]
+    ['get', ['username','index','-a','-z'],
+     {'help':'load a password to clipboard'}],
+    ['add', ['-a','-z','PASSWORD','-u','-i','-n'],
+     {'help':'add an entry'}],
+    ['del', ['username','index','-z'],
+     {'help':'delete an entry'}],
+    ['undel', ['username','index','-z'],
+     {'help':'delete an entry'}],
+    ['mod', ['username','index','-z','PASSWORD','-u','-i','-n'],
+     {'help':'modify an entry'}],
+    ['view', ['-a','-z'],
+     {'help':'view entries'}],
+    ['chpass', [],
+     {'help':"change databases's password"}]
 ]
-allargs = [
-    [['username'],
+allargs = {
+    'username':
         {'metavar':'USERNAME', 'type':str, 'nargs':'?',
-            'help':'query a username'}],
-    [['index'],
+            'help':'query a username'},
+    'index':
         {'metavar':'INDEX', 'type':int, 'nargs':'?',
-            'help':"query by entry's position"}],
-    [['-a'], {'action':'store_true', 'help':'work on the archive'}],
-    [['-z'], {'action':'store_true', 'help':'show passwords'}],
-    [['PASSWORD'], None],
-    [['-u'], {'metavar':'USERNAME', 'type':str, 'help':'new username'}],
-    [['-i'], {'metavar':'INDEX', 'type':int, 'help':'new index'}],
-    [['-n'], {'metavar':'NOTE', 'type':str, 'help':'new note'}],
-]
+            'help':"query by entry's position"},
+    '-a': {'action':'store_true', 'help':'work on the archive'},
+    '-z': {'action':'store_true', 'help':'show passwords'},
+    '-u': {'metavar':'USERNAME', 'type':str, 'help':'new username'},
+    '-i': {'metavar':'INDEX', 'type':int, 'help':'new index'},
+    '-n': {'metavar':'NOTE', 'type':str, 'help':'new note'},
+}
 parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers(title='commands', dest='command')
-for cmd_pos, cmd_named in allcmds :
-    subp = subparsers.add_parser(*cmd_pos, **cmd_named)
-    for arg_pos, arg_named in allargs:
-        if arg_pos[0] == '-a': 
-            if cmd_pos[0] in {'get', 'add', 'view'}:
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] == '-b': 
-            if cmd_pos[0] not in {'view', 'chpass'}:
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] == '-z': 
-            if cmd_pos[0] != 'chpass':
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] in {'username', 'index'}: 
-            if cmd_pos[0] not in {'add', 'view', 'chpass'}:
-                subp.add_argument(*arg_pos, **arg_named)
-        elif arg_pos[0] == 'PASSWORD':
-            if cmd_pos[0] in {'add', 'mod'}:
-                muex = subp.add_mutually_exclusive_group()
-                muex.add_argument('-g', metavar=('LEN', 'SET'),
-                    nargs=2, type=str,
-                    help='generate a new LEN-long password from SET')
-                muex.add_argument('-m', action='store_true',
-                    help='manually define password')
-        elif arg_pos[0] in {'-u', '-i', '-n'}:
-            if cmd_pos[0] in {'add', 'mod'}:
-                subp.add_argument(*arg_pos, **arg_named)
+for cmd_name, cmd_args, cmd_named in allcmds :
+    subp = subparsers.add_parser(cmd_name, **cmd_named)
+    for arg in cmd_args:
+        if arg == 'PASSWORD':
+            muex = subp.add_mutually_exclusive_group()
+            muex.add_argument('-g', metavar=('LEN', 'SET'),
+                nargs=2, type=str,
+                help='generate a new LEN-long password from SET')
+            muex.add_argument('-m', action='store_true',
+                help='manually define password')
         else:
-            printerr('ldap://db.nsa.gov/{} timed out'.format(arg_pos[0]))
+            subp.add_argument(arg, **allargs[arg])
 args = parser.parse_args()
 
 # dispatcher
@@ -522,7 +517,7 @@ try:
         sys.stderr.write(banner)
         parser.print_help()
     elif args.command == 'get':
-        get(args.username, args.index, args.z)
+        get(args.username, args.index, args.a, args.z)
     elif args.command == 'add':
         add(args.u, args.i, args.g, args.m, args.n, args.a, args.z)
     elif args.command == 'del':
