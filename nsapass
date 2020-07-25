@@ -229,7 +229,7 @@ def genpass(gen, showpass):
             break
     return password
 
-def checkquery(db, username, index):
+def checkquery(db, username, index, arc=None):
     """checks if supplied query (username, index) exists in the database
     db.  in case it doesnt't, it tries to guesses sensibly (by guessing
     nearest match, or by prompting for correction).  if no sensible guess
@@ -239,6 +239,9 @@ def checkquery(db, username, index):
     if len(db) == 0:
         printerr('databse is empty')
     usernames = list(db)
+    if arc is not None: # filter users without relevant entries
+        usernames = [u for u in usernames
+            if len([() for user in db[u] if user[KEY_ARC] == arc]) > 0]
     if username is None:
         if len(usernames) == 1:
             printwarn('only "{}" in db.  '
@@ -248,7 +251,7 @@ def checkquery(db, username, index):
             username = ask('query username:', options=usernames)
     elif username not in db:
         matches = []
-        for u in db:
+        for u in usernames:
             start = u.find(username)
             if start == 0:
                 matches.append(u)
@@ -261,12 +264,13 @@ def checkquery(db, username, index):
             printwarn('our guesses: {}'.format(', '.join(matches)))
             username = ask('query username:', options=usernames)
     if index is None:
-        indexes=[str(i) for i in range(0, len(db[username]))]
+        indexes=[str(i) for i in range(0, len(db[username]))
+            if arc is None or db[username][i][KEY_ARC] == arc]
         if len(indexes) == 1:
             printwarn('only a single index for "{}" in db'.format(
                 username))
             printwarn("you must've wanted it.  got it!")
-            index = 0
+            index = int(indexes[0])
         else:
             index = ask('query index:', options=indexes)
             index = int(index)
@@ -340,10 +344,10 @@ def save(d):
         except FileNotFoundError:
             pass
 
-def get(username, index, showpass):
+def get(username, index, arc, showpass):
     """get a password entry and store it in clipboard"""
     db = load(lock=False)
-    username, index = checkquery(db, username, index)
+    username, index = checkquery(db, username, index, arc=arc)
     printinfo('entry to copy:')
     printentry(db, username, index, showpass)
     printinfo('copying password...')
@@ -399,7 +403,7 @@ def undelete(username, index, showpass):
     """undelete a password entry from the databases.  this removes the
     archive flag"""
     db = load()
-    username, index = checkquery(db, username, index)
+    username, index = checkquery(db, username, index, arc=True)
     printinfo('undeleting entry...')
     printentry(db, username, index, showpass)
     if not db[username][index][KEY_ARC]:
@@ -452,7 +456,7 @@ def chpass():
 # arguments are specified by their named arguments to `add_argument`.
 # 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
-    ['get', ['username','index','-z'],
+    ['get', ['username','index','-a','-z'],
      {'help':'load a password to clipboard'}],
     ['add', ['-a','-z','PASSWORD','-u','-i','-n'],
      {'help':'add an entry'}],
@@ -513,7 +517,7 @@ try:
         sys.stderr.write(banner)
         parser.print_help()
     elif args.command == 'get':
-        get(args.username, args.index, args.z)
+        get(args.username, args.index, args.a, args.z)
     elif args.command == 'add':
         add(args.u, args.i, args.g, args.m, args.n, args.a, args.z)
     elif args.command == 'del':
