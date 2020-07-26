@@ -64,8 +64,6 @@ THEME = {
     'PASS' : '\33[0;41m', # passwords color
     'PROMPT' : '\33[0;34m',
     'KEY' : '\33[0;90m',
-    'ARC' : '\33[1;31m', # true archived flag
-    'NOTARC' : '\33[0;90m', # false archived flag
 }
 
 #######################################
@@ -76,7 +74,6 @@ THEME = {
 
 KEY_PASS = 'password'
 KEY_NOTE = 'note'
-KEY_ARC = 'archived'
 
 def printinfo(msg):
     sys.stdout.write('{INFO}*{CLR} {}\n'.format(msg, **THEME))
@@ -107,41 +104,36 @@ def printprompt(msg):
 def printout(msg):
     sys.stdout.write('  {}\n'.format(msg))
     sys.stdout.flush()
-    sys.stdout.flush()
 
-def printentry(db, username, index, showpass, showarc=True):
+def printentry(db, id, rev, showpass, showold=True):
     """print a password entry from supplied passwords database"""
-    if username == None:
-        usernames = list(db)
+    if id == None:
+        ids = list(db)
     else:
-        usernames = [username]
-    for u in usernames:
-        username_printed = False
-        if index == None:
-            indexes = range(0, len(db[u]))
+        ids = [id]
+    for id in ids:
+        id_printed = False
+        if rev == None:
+            revs = range(0, len(db[id]))
         else:
-            indexes = [index]
-        for i in indexes:
-            note = db[u][i][KEY_NOTE]
-            archived = db[u][i][KEY_ARC]
-            if archived:
-                arcfmt = '{ARC}{}{CLR}'.format(archived, **THEME)
-                if not showarc:
-                    continue
-            else:
-                arcfmt = '{NOTARC}{}{CLR}'.format(archived, **THEME)
+            revs = [rev]
+        for rev in revs:
+            if db[id][rev] is None:
+                continue
+            note = db[id][rev][KEY_NOTE]
+            if rev > 0 and not showold:
+                continue
             if showpass:
                 password = '{PASS}{}{CLR}'.format(
-                    db[u][i][KEY_PASS], **THEME)
+                    db[id][rev][KEY_PASS], **THEME)
             else:
                 password = '**********'
-            if not username_printed:
-                printout('{KEY}username:{CLR} {}'.format(u, **THEME))
-                username_printed = True
-            printout('  {KEY}index   :{CLR} {}'.format(i, **THEME))
+            if not id_printed:
+                printout('{KEY}id:{CLR} {}'.format(id, **THEME))
+                id_printed = True
+            printout('  {KEY}revision:{CLR} {}'.format(rev, **THEME))
             printout('  {KEY}password:{CLR} {}'.format(password, **THEME))
             printout('  {KEY}note    :{CLR} {}'.format(note, **THEME))
-            printout('  {KEY}archived:{CLR} {}'.format(arcfmt, **THEME))
             printout('')
 
 def cmd(cmd, stdin=None, stdout=subprocess.PIPE):
@@ -229,8 +221,8 @@ def genpass(gen, showpass):
             break
     return password
 
-def checkquery(db, username, index, arc=None):
-    """checks if supplied query (username, index) exists in the database
+def checkquery(db, id, rev, old=None):
+    """checks if supplied query (id, rev) exists in the database
     db.  in case it doesnt't, it tries to guesses sensibly (by guessing
     nearest match, or by prompting for correction).  if no sensible guess
     is possible, it prompts the user.  if there is no hope even asking the
@@ -238,54 +230,50 @@ def checkquery(db, username, index, arc=None):
     behind"""
     if len(db) == 0:
         printerr('databse is empty')
-    usernames = list(db)
-    if arc is not None: # filter users without relevant entries
-        usernames = [u for u in usernames
-            if len([() for user in db[u] if user[KEY_ARC] == arc]) > 0]
-    if username is None:
-        if len(usernames) == 1:
+    ids = list(db)
+    if old == True:  # filter users without old entries
+        ids = [i for i in ids if len(db[i]) > 1]
+    if old == False: # filter users without active entries
+        ids = [i for i in ids if db[i][0] is not None]
+    if id is None:
+        if len(ids) == 1:
             printwarn('only "{}" in db.  '
-                "you must've wanted this one.  got it!".format(usernames[0]))
-            username = usernames[0]
+                "you must've wanted this one.  got it!".format(ids[0]))
+            id = ids[0]
         else:
-            username = ask('query username:', options=usernames)
-    elif username not in db:
-        matches = []
-        for u in usernames:
-            start = u.find(username)
-            if start == 0:
-                matches.append(u)
+            id = ask('query id:', options=ids)
+    elif id not in db:
+        matches = [i for i in ids if i.find(id) == 0]
         if len(matches) == 1:
             printwarn('actually wanted "{}", right?  '
                 'got it!'.format(matches[0]))
-            username = matches[0]
+            i = matches[0]
         else:
-            printwarn('username "{}" not found'.format(username))
+            printwarn('id "{}" not found'.format(id))
             printwarn('our guesses: {}'.format(', '.join(matches)))
-            username = ask('query username:', options=usernames)
-    if index is None:
-        indexes=[str(i) for i in range(0, len(db[username]))
-            if arc is None or db[username][i][KEY_ARC] == arc]
-        if len(indexes) == 1:
-            printwarn('only a single index for "{}" in db'.format(
-                username))
+            id = ask('query id:', options=ids)
+    revs = [i for i in range(0, len(db[id]))
+        if db[id][i] is not None and (old is None or (i > 0) == old)]
+    if rev not in revs:
+        if rev is not None:
+            printwarn('revision "{}" is invalid'.format(rev))
+        if len(revs) == 1:
+            printwarn('only a single revision for "{}" in db'.format(
+                id))
             printwarn("you must've wanted it.  got it!")
-            index = int(indexes[0])
+            rev = revs[0]
         else:
-            index = ask('query index:', options=indexes)
-            index = int(index)
-    return username, index
+            rev = ask('query revision:', options=[str(rev) for rev in revs])
+            rev = int(rev)
+    return id, rev
 
-def checknew(username, index, password, gen, manual, note, showpass,
-    lazy=False):
+def checknew(id, password, gen, manual, note, showpass, lazy=False):
     """similar to checkquery, except that this is for checking, guessing,
     and correcting new entries (not queries).  when lazy=True, it will stop
     trying to resolve Nones values (this is good for `nsapass mod` where
     None is used to indicate that no change is to be made)"""
-    if username is None and not lazy:
-        username = ask('new username:', required=True)
-    if index is None and not lazy:
-        index = ask('new index:', minimum=0, default=0)
+    if id is None and not lazy:
+        id = ask('new id:', required=True)
     if password is None:
         if gen:
             password = genpass(gen, showpass)
@@ -303,7 +291,7 @@ def checknew(username, index, password, gen, manual, note, showpass,
                 password = askpass()
     if note is None and not lazy:
         note = ask('note:')
-    return username, index, password, note
+    return id, password, note
 
 def load(lock=True):
     """load passwords database"""
@@ -344,14 +332,14 @@ def save(d):
         except FileNotFoundError:
             pass
 
-def get(username, index, arc, showpass):
+def get(id, rev, old, showpass):
     """get a password entry and store it in clipboard"""
     db = load(lock=False)
-    username, index = checkquery(db, username, index, arc=arc)
+    id, rev = checkquery(db, id, rev, old=old)
     printinfo('entry to copy:')
-    printentry(db, username, index, showpass)
+    printentry(db, id, rev, showpass)
     printinfo('copying password...')
-    password = db[username][index][KEY_PASS]
+    password = db[id][rev][KEY_PASS]
     cmd(CLIPCMD, stdin=password.encode(), stdout=None)
     printinfo('deleting in {} seconds...'.format(COPYLIFE))
     try:
@@ -361,89 +349,79 @@ def get(username, index, arc, showpass):
     printinfo('deleting...')
     cmd(CLIPCMD, stdin=COPYDEL.encode(), stdout=None)
 
-def add(username, index, gen, manual, note, arc, showpass,
+def add(id, gen, manual, note, showpass,
     password=None, db=None, save_db=True):
     """add a new password entry into the database"""
-    username, index, password, note = checknew(username, index, password,
+    id, password, note = checknew(id, password,
         gen, manual, note, showpass)
     if db is None:
         db = load()
     printinfo('adding entry...')
-    entry = {KEY_PASS:password, KEY_NOTE:note, KEY_ARC:arc}
-    if username in db:
-        db[username].insert(index, entry)
+    entry = {KEY_PASS:password, KEY_NOTE:note}
+    if id in db:
+        if db[id][0] is None:
+            del deb[id][0]
+        db[id].insert(0, entry)
     else:
-        db[username] = [entry]
-    if index >= len(db[username]):
-        index = len(db[username]) - 1
-    printentry(db, username, index, showpass)
+        db[id] = [entry]
+    printentry(db, id, 0, showpass)
     if save_db:
         save(db)
 
-def delete(username, index, showpass, db=None, save_db=True):
+def delete(id, rev, showpass, db=None, save_db=True):
     """delete a password entry from the database.  first deletion will
     archive the entry.  2nd deletion will delete it"""
     if db is None:
         db = load()
-    username, index = checkquery(db, username, index)
+    id, rev = checkquery(db, id, rev)
     printinfo('entry to delete:')
-    printentry(db, username, index, showpass)
-    if not db[username][index][KEY_ARC]:
-        printinfo('archiving entry...')
-        db[username][index][KEY_ARC] = True
+    printentry(db, id, rev, showpass)
+    if rev == 0:
+        printinfo('moving entry to old revision...')
+        db[id].insert(0, None)
     else:
         printinfo('deleting...')
-        del db[username][index]
-        if len(db[username]) == 0:
-            del db[username]
+        del db[id][rev]
+        if db[id] == [None]:
+            del db[id]
     if save_db:
         save(db)
 
-def undelete(username, index, showpass):
-    """undelete a password entry from the databases.  this removes the
-    archive flag"""
+def undelete(id, rev, showpass):
+    """undelete a password entry from the databases."""
     db = load()
-    username, index = checkquery(db, username, index, arc=True)
+    id, rev = checkquery(db, id, rev, old=True) # ensures rev != 0
     printinfo('undeleting entry...')
-    printentry(db, username, index, showpass)
-    if not db[username][index][KEY_ARC]:
-        printerr('already undeleted')
-    else:
-        db[username][index][KEY_ARC] = False
+    printentry(db, id, rev, showpass)
+    if db[id][0] is not None:
+        db[id].insert(0, None)
+        rev = rev + 1
+    db[id][0] = db[id][rev]
+    del db[id][rev]
     save(db)
 
-def modify(username, index, new_username, new_index, gen, manual, note,
-    showpass):
+def modify(id, rev, new_id, gen, manual, note, showpass):
     """modify a password entry from the database"""
     db = load()
-    username, index = checkquery(db, username, index)
-    new_username, new_index, password, note = checknew(new_username,
-        new_index, None, gen, manual, note, showpass, lazy=True)
-    if {new_username, new_index, password, note} == {None}:
+    id, rev = checkquery(db, id, rev)
+    new_id, password, note = checknew(new_id, None, gen, manual, note,
+        showpass, lazy=True)
+    if {new_id, password, note} == {None}:
         printerr('no modifications specified')
-    if new_username is None:
-        new_username = username
-    if new_index is None:
-        new_index = index
+    if new_id is None:
+        new_id = id
     if password is None:
-         password = db[username][index][KEY_PASS]
+         password = db[id][rev][KEY_PASS]
     if note is None:
-         note = db[username][index][KEY_NOTE]
-    arc = db[username][index][KEY_ARC]
-    # case where entry will be gone, and indexes may shift.  so we may need
-    # to adjust new_index if so
-    if arc:
-        if new_index > index:
-            new_index -= 1
-    delete(username, index, showpass, db=db, save_db=False)
-    add(new_username, new_index, None, None, note, arc, showpass,
+         note = db[id][rev][KEY_NOTE]
+    add(new_id, None, None, note, showpass,
         password=password, db=db, save_db=False)
     save(db)
 
-def view(showarc, showpass):
+def view(showold, showpass):
     """lists password entries from the database"""
     db = load(lock=False)
-    printentry(db, None, None, showpass, showarc=showarc)
+    printentry(db, None, None, showpass, showold=showold)
 
 def chpass():
     """re-encrypt the database with a new password"""
@@ -456,32 +434,31 @@ def chpass():
 # arguments are specified by their named arguments to `add_argument`.
 # 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
-    ['get', ['username','index','-a','-z'],
+    ['get', ['id','rev','-o','-z'],
      {'help':'load a password to clipboard'}],
-    ['add', ['-a','-z','PASSWORD','-u','-i','-n'],
+    ['add', ['id','-z','PASSWORD','-n'],
      {'help':'add an entry'}],
-    ['del', ['username','index','-z'],
+    ['del', ['id','rev','-z'],
      {'help':'delete an entry'}],
-    ['undel', ['username','index','-z'],
+    ['undel', ['id','rev','-z'],
      {'help':'delete an entry'}],
-    ['mod', ['username','index','-z','PASSWORD','-u','-i','-n'],
+    ['mod', ['id','rev','-z','PASSWORD','-u','-n'],
      {'help':'modify an entry'}],
-    ['view', ['-a','-z'],
+    ['view', ['-o','-z'],
      {'help':'view entries'}],
     ['chpass', [],
      {'help':"change databases's password"}]
 ]
 allargs = {
-    'username':
-        {'metavar':'USERNAME', 'type':str, 'nargs':'?',
-            'help':'query a username'},
-    'index':
-        {'metavar':'INDEX', 'type':int, 'nargs':'?',
+    'id':
+        {'metavar':'ID', 'type':str, 'nargs':'?',
+            'help':'query a id'},
+    'rev':
+        {'metavar':'REV', 'type':int, 'nargs':'?',
             'help':"query by entry's position"},
-    '-a': {'action':'store_true', 'help':'work on the archive'},
+    '-o': {'action':'store_true', 'help':'work on old revisions'},
     '-z': {'action':'store_true', 'help':'show passwords'},
-    '-u': {'metavar':'USERNAME', 'type':str, 'help':'new username'},
-    '-i': {'metavar':'INDEX', 'type':int, 'help':'new index'},
+    '-u': {'metavar':'ID', 'type':str, 'help':'new id'},
     '-n': {'metavar':'NOTE', 'type':str, 'help':'new note'},
 }
 parser = argparse.ArgumentParser()
@@ -517,18 +494,18 @@ try:
         sys.stderr.write(banner)
         parser.print_help()
     elif args.command == 'get':
-        get(args.username, args.index, args.a, args.z)
+        get(args.id, args.rev, args.o, args.z)
     elif args.command == 'add':
-        add(args.u, args.i, args.g, args.m, args.n, args.a, args.z)
+        add(args.id, args.g, args.m, args.n, args.z)
     elif args.command == 'del':
-        delete(args.username, args.index, args.z)
+        delete(args.id, args.rev, args.z)
     elif args.command == 'undel':
-        undelete(args.username, args.index, args.z)
+        undelete(args.id, args.rev, args.z)
     elif args.command == 'mod':
-        modify(args.username, args.index, args.u, args.i, args.g, args.m,
+        modify(args.id, args.rev, args.i, args.g, args.m,
             args.n, args.z)
     elif args.command == 'view':
-        view(args.a, args.z)
+        view(args.o, args.z)
     elif args.command == 'chpass':
         chpass()
 except KeyboardInterrupt:
