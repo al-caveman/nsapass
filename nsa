@@ -1,0 +1,521 @@
+#!/usr/bin/python3
+# nsapass  Copyright (C) <2020>  <caveman>
+# licensed under GPLv3 for details read LICENSE in
+# https://github.com/al-caveman/nsapass
+import argparse
+import os
+import sys
+import string
+import json
+import subprocess
+import time
+import secrets
+import atexit
+import getpass
+
+#######################################
+#                             __      #
+#           configs below   <(o )___  #
+#                            ( ._> /  #
+#######################################
+
+# location of encrypted passwords db
+DB = os.path.expanduser('~/.local/share/nsapass/db.enc')
+
+# how many seconds should copied passwords remain in the clipboard?
+COPYLIFE = 5
+
+# what to copy in order to delete previous copy?
+COPYDEL = '~\o deleted by nsapass™ o/~'
+
+# password character sets
+SETS = {
+    'alphanumerics' : string.ascii_letters + string.digits,
+    'hexdigits' : string.hexdigits,
+    'printable' : ' ' + ''.join(c for c in string.printable if c not in
+    string.whitespace),
+}
+
+# command to load passwords db
+DECCMD = ['scrypt', 'dec', '{}']
+
+# command to save passwords db (must read plaintext from stdin)
+ENCCMD = ['scrypt', 'enc', '-', '{}']
+
+# command to paste into clipboard (must accept data from stdin)
+CLIPCMD = ['xclip', '-selection', 'clipboard']
+
+# theme
+THEME = {
+    'BANNER': '\33[0;90m',
+    'INFO'  : '\33[1;32m',
+    'WARN'  : '\33[1;33m',
+    'ERR'   : '\33[1;31m',
+    'CLR'   : '\33[0m',
+    'PASS'  : '\33[0;41m', # passwords color
+    'PROMPT': '\33[0;34m',
+    'KEY'   : '\33[0;90m',
+    'TAGS'  : '\33[1;32m',
+    'ARC'   : '\33[0;31m', # archived flag
+}
+
+#########################################
+# WARNING: normal ppl plz no looking!   #
+# WARNING: nude app bits ahead!         #
+#             (devs only)               #
+#########################################
+
+KEY_TAGS = 'tags'
+KEY_PASS = 'password'
+KEY_NOTE = 'note'
+KEY_TIME = 'timestamp'
+KEY_ARC = 'archived'
+
+def frmtpass(password, showpass):
+    """formats passwords based on its visibility setting"""
+    if showpass:
+        return '{PASS}{}{CLR}'.format(password, **THEME)
+    return '**********'
+
+def frmtask(msg):
+    return '{PROMPT}< {}{CLR} '.format( msg, **THEME)
+
+def printinfo(msg):
+    sys.stdout.write('{INFO}*{CLR} {}\n'.format(msg, **THEME))
+    sys.stdout.flush()
+
+def printwarn(msg):
+    sys.stderr.write('{WARN}*{CLR} {}\n'.format(msg, **THEME))
+    sys.stderr.flush()
+
+def printout(msg):
+    sys.stdout.write('  {}\n'.format(msg))
+    sys.stdout.flush()
+
+def err(msg, exit=True):
+    sys.stderr.write('{ERR}*{CLR} {}\n'.format(msg, **THEME))
+    sys.stderr.flush()
+    if exit:
+        sys.stderr.write('{ERR}*{CLR} exiting..\n'.format(**THEME))
+        sys.stderr.flush()
+        sys.exit(1)
+
+def printentry(db, tags, showpass=False, showold=False):
+    """print a password entry from supplied passwords database"""
+    printout('{TAGS}{}{CLR}'.format(tags, **THEME))
+    rev_list = [0]
+    if showold:
+        rev_list = range(0, len(db[tags]))
+    for r in rev_list:
+        d = {'r'    : r,
+            'sp'    : '  ' if r else ' ',
+            't'     : db[tags][r][KEY_TAGS],
+            'p'     : frmtpass(db[tags][r][KEY_PASS], showpass),
+            'n'     : db[tags][r][KEY_NOTE],
+            'ts'    : time.ctime(db[tags][r][KEY_TIME])}
+        if db[tags][r][KEY_ARC]:
+            printout('{sp}{ARC}archived{CLR}'.format(**d, **THEME))
+        if r:
+            printout('{sp}{KEY}revision :{CLR} {r}'.format(**d, **THEME))
+            printout('{sp}{KEY}tags     :{CLR} {t}'.format(**d, **THEME))
+        printout('{sp}{KEY}password :{CLR} {p}'.format(**d, **THEME))
+        printout('{sp}{KEY}note     :{CLR} {n}'.format(**d, **THEME))
+        printout('{sp}{KEY}timestamp:{CLR} {ts}\n'.format(**d, **THEME))
+
+def run(cmd, retry=False, stdin=None, stdout=subprocess.PIPE):
+    """run an external command"""
+    c = subprocess.run(cmd, input=stdin, stdout=stdout)
+    if c.returncode != 0:
+        if retry:
+            printwarn('retrying..')
+            return run(cmd, retry=retry, stdin=stdin, stdout=stdout)
+        err('command failed')
+    return c.stdout
+
+def cleanwords(words):
+    if type(words) is list:
+        words = ' '.join(words)
+    words = ' '.join(words.split())
+    return None if words == '' else words
+
+def search(query, options):
+    """searches for a string.  query can be a tags list or tags string"""
+    query = cleanwords(query)
+    printinfo(f'searching with "{query}"...')
+    if query is None:
+        return options
+    if query in options:
+        return [query]
+    words = query.split()
+    matches = []
+    for o in options:
+        tags = o.split()
+        try:
+            if {tags[i].find(w) for i,w in enumerate(words)} == {0}:
+                matches.append(o)
+        except IndexError:
+            pass
+    return matches
+
+def askpass():
+    """prompts users for password"""
+    while True:
+        pass1 = getpass.getpass(frmtask('new password:'))
+        pass2 = getpass.getpass(frmtask('confirm pass:'))
+        if pass1 == pass2:
+            return pass1
+        printwarn('passwords mismatched.  retrying...')
+
+def genpass(length, psetname, showpass):
+    """generate password"""
+    try:
+        length = int(length)
+        if length < 1:
+            err(f'LEN "{length}" is not positive')
+    except TypeError:
+        err(f'LEN "{length}" is not int')
+    try:
+        pset = SETS[psetname]
+    except KeyError:
+        err(f'bad SET "{psetname}".  valid options are: {", ".join(SETS)}')
+    printinfo(f'making a {length}-chars key from "{psetname}"...')
+    while True:
+        password = ''.join(secrets.choice(pset) for i in range(0, length))
+        if showpass:
+            printout(frmtpass(password, showpass))
+            ans = input(frmtask('happy? [y/N]'))
+            if ans == 'y':
+                return password
+        else:
+            return password
+
+def newpass(gen, manual, showpass, required=False):
+    if gen is not None:
+        return genpass(gen[0], gen[1], showpass)
+    if manual:
+        return askpass()
+    if required:
+        err('password is required')
+    return None
+
+def newtags(tags, required=False):
+    """picks a new set of tags"""
+    if tags is None and not required:
+        return None
+    while True:
+        if tags is None:
+            tags = cleanwords(input(frmtask('specify tags:')))
+        else:
+            return cleanwords(tags)
+
+def lock():
+    """lock passwords database file"""
+    printinfo('locking db...')
+    lockDB = DB + '.lock'
+    dirname = os.path.dirname(lockDB)
+    os.makedirs(dirname, exist_ok=True)
+    try:
+        open(lockDB, 'xb').close()
+    except FileExistsError:
+        err(f'lock file "{lockDB}" exists.  delete it if not used')
+    atexit.register(os.unlink, lockDB)
+    atexit.register(printinfo, 'unlocking db...')
+
+def load(nonempty=False):
+    """load passwords database"""
+    printinfo('loading db...')
+    if os.path.exists(DB):
+        data = run([p.format(DB) for p in DECCMD], retry=True)
+    else:
+        printwarn(f'"{DB}" not found.')
+        data = '{}'
+    try:
+        db = json.loads(data)
+    except json.JSONDecodeError:
+        err(f'error decoding database "{DB}"')
+    if len(db) == 0 and nonempty:
+        err('database is empty')
+    return db
+
+def save(d):
+    """save passwords database"""
+    printinfo('saving db...')
+    data = json.dumps(d, indent=4)
+    tmpDB = DB + '.temp'
+    try:
+        run([p.format(tmpDB) for p in ENCCMD], stdin=data.encode())
+        os.rename(tmpDB, DB)
+    finally:
+        try:
+            os.unlink(tmpDB)
+        except FileNotFoundError:
+            pass
+
+def clip(db, tags, rev):
+    """copy entry from db into clipboard"""
+    printinfo('copying password...')
+    if rev is None:
+        rev = 0
+    password = db[tags][rev][KEY_PASS]
+    run(CLIPCMD, stdin=password.encode(), stdout=None)
+    printinfo(f'uncopying in {COPYLIFE} seconds...')
+    try:
+        time.sleep(COPYLIFE)
+    except KeyboardInterrupt:
+        printwarn('received keyboard interrupt.')
+    printinfo('uncopying...')
+    run(CLIPCMD, stdin=COPYDEL.encode(), stdout=None)
+
+def picktags(db, query, arc=False):
+    """picks a unique tags entry"""
+    options = [t for t in db if db[t][0][KEY_ARC] is arc]
+    while True:
+        matches = search(query, options)
+        if len(matches) == 0:
+            printwarn('no match.  available tags list:')
+            for o in options:
+                printout(' ' + o)
+        elif len(matches) > 1:
+            printwarn('too many matched tags:')
+            for m in matches:
+                printout(' ' + m)
+        elif len(matches) == 1:
+            printinfo(f'matched: {matches[0]}')
+            return matches[0]
+        query = input(frmtask('specify query tags:'))
+
+def pickrev(db, tags, rev, required=False):
+    "pick a unique revision"""
+    if required is False and rev is None:
+        printinfo('revision defaulting to 0...')
+        return 0
+    revs = range(0, len(db[tags]))
+    while True:
+        if rev in revs:
+            return rev
+        rev = input(frmtask(f'pick REV in {{0, ..., {len(revs)-1}}}:'))
+        try:
+            rev = int(rev)
+            if rev < 0:
+                printwarn('revision must be positive')
+        except ValueError:
+            printwarn('revision must be an integer')
+
+def add(db, tags, password, note):
+    """add a new entry from db"""
+    printinfo('adding entry...')
+    entry = {KEY_TAGS:tags, KEY_PASS:password, KEY_NOTE:note,
+        KEY_TIME:time.time(), KEY_ARC:False}
+    if tags in db:
+        printwarn(f'"{tags}" exists.  additing as a new revision...')
+        db[tags].insert(0, entry)
+    else:
+        db[tags] = [entry]
+
+def delete(db, tags):
+    """delete an entry from db"""
+    if db[tags][0][KEY_ARC]:
+        printinfo('permanently deleting (told you!)...')
+        del db[tags]
+    else:
+        printinfo('archiving (2nd time will delete permanently)...')
+        tmp = dict(db[tags][0])
+        tmp[KEY_ARC] = True
+        tmp[KEY_TIME] = time.time()
+        db[tags].insert(0, tmp)
+
+def undelete(db, tags):
+    """undelete an entry from db"""
+    printinfo('undeleting...')
+    if db[tags][0][KEY_ARC]:
+        tmp = dict(db[tags][0])
+        tmp[KEY_ARC] = False
+        tmp[KEY_TIME] = time.time()
+        db[tags].insert(0, tmp)
+    else:
+        err('already undeleted')
+
+def timetravel(db, tags, rev):
+    """travel into time rev"""
+    printinfo('traveling through time...')
+    tmp = db[tags].pop(rev)
+    db[tags].insert(0, tmp)
+    db[tmp[KEY_TAGS]] = db.pop(tags)
+
+def modify(db, cur_tags, new_tags, password, note):
+    """modify an entry from db"""
+    printinfo('modifying...')
+    tmp = dict(db[cur_tags][0])
+    if new_tags is not None:
+        tmp[KEY_TAGS] = new_tags
+    if password is not None:
+        tmp[KEY_PASS] = password
+    if note is not None:
+        tmp[KEY_NOTE] = None if note == '' else note
+    tmp[KEY_TIME] = time.time()
+    db[cur_tags].insert(0, tmp)
+    if new_tags is not None:
+        db[new_tags] = db.pop(cur_tags)
+
+def forget(db, tags, retain):
+    """forget the distant past of an entry from db"""
+    printinfo('forgetting distant memories...')
+    db[tags] = db[tags][0:retain+1]
+
+# parse arguments
+# commands are specified by their name, list of command arguments, and
+# extra named arguments for `add_parser`.
+# arguments are specified by their named arguments to `add_argument`.
+# 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
+allcmds = [
+    ['get', ['tags', '-r', '-a', '-z'],
+        {'help':'load a password to clipboard'}],
+    ['add', ['tags', 'PASSWORD', '-n', '-z'],
+        {'help':'add an entry'}],
+    ['del', ['tags', '-a', '-z'],
+        {'help':'delete an entry'}],
+    ['undel', ['tags', '-z'],
+        {'help':'undelete an entry'}],
+    ['mod', ['tags', '-t', 'PASSWORD', '-n', '-a', '-z'],
+        {'help':'modify an entry'}],
+    ['undo', ['tags', '-r', '-a', '-z'],
+        {'help':'travel through time'}],
+    ['forget', ['tags', '-r', '-a', '-z'],
+        {'help':'forget the past of an entry'}],
+    ['ls', ['tags', '-o', '-a', '-z'],
+        {'help':'view entries'}],
+    ['chpass', [],
+        {'help':"change databases's password"}]
+]
+allargs = {
+    'tags':
+        {'metavar':'TAG', 'type':str, 'nargs':'*',
+            'help':'query tags'},
+    '-r': {'metavar':'REV', 'type':int,
+        'help':"revision index to travel to"},
+    '-o': {'action':'store_true', 'help':'show old history'},
+    '-a': {'action':'store_true', 'help':'work on the archive'},
+    '-z': {'action':'store_true', 'help':'show passwords'},
+    '-t': {'metavar':'TAG', 'type':str, 'nargs':'+',
+        'help':"new entry's tags"},
+    '-n': {'metavar':'NOTE', 'type':str, 'help':'new note'},
+}
+parser = argparse.ArgumentParser()
+subparsers = parser.add_subparsers(title='commands', dest='command')
+for cmd_name, cmd_args, cmd_named in allcmds :
+    subp = subparsers.add_parser(cmd_name, **cmd_named)
+    for arg in cmd_args:
+        if arg == 'PASSWORD':
+            muex = subp.add_mutually_exclusive_group()
+            muex.add_argument('-g', metavar=('LEN', 'SET'),
+                nargs=2, type=str,
+                help='generate a new LEN-long password from SET')
+            muex.add_argument('-m', action='store_true',
+                help='manually define password')
+        else:
+            subp.add_argument(arg, **allargs[arg])
+args = parser.parse_args()
+
+# part where stuff start happening
+banner = """{BANNER}\
+nsapass™ — all your schlüssel are safely stored with us!™
+licensed under the GNU GPLv3.
+https://github.com/Al-Caveman/nsapass/
+
+for permanent settings edit the file "{}".
+{CLR}
+""".format(sys.argv[0], **THEME)
+try:
+    if args.command is None:
+        sys.stderr.write(banner)
+        sys.stderr.flush()
+        parser.print_help()
+    elif args.command == 'get':
+        db = load(nonempty=True)
+        tags = picktags(db, args.tags)
+        rev = pickrev(db, tags, args.r)
+        printinfo('entry to load into clipboard:')
+        printentry(db, tags, showpass=args.z)
+        clip(db, tags, rev)
+    elif args.command == 'add':
+        tags = newtags(args.tags, required=True)
+        password = newpass(args.g, args.m, args.z, required=True)
+        lock()
+        db = load()
+        add(db, tags, password, args.n)
+        printinfo('added entry:')
+        printentry(db, tags, showpass=args.z)
+        save(db)
+    elif args.command == 'del':
+        lock()
+        db = load(nonempty=True)
+        tags = picktags(db, args.tags, arc=args.a)
+        printinfo('entry to delete:')
+        printentry(db, tags, showpass=args.z)
+        delete(db, tags)
+        save(db)
+    elif args.command == 'undel':
+        lock()
+        db = load(nonempty=True)
+        tags = picktags(db, args.tags, arc=True)
+        printinfo('entry to undelete:')
+        printentry(db, tags, showpass=args.z)
+        undelete(db, tags)
+        save(db)
+    elif args.command == 'mod':
+        new_tags = newtags(args.t)
+        password = newpass(args.g, args.m, args.z)
+        if {new_tags, password, args.n} == {None}:
+            err('no changes requested')
+        lock()
+        db = load(nonempty=True)
+        cur_tags = picktags(db, args.tags, arc=args.a)
+        printinfo('entry to modify:')
+        printentry(db, cur_tags, showpass=args.z)
+        modify(db, cur_tags, new_tags, password, args.n)
+        printinfo('entry after modification:')
+        if new_tags is None:
+            new_tags = cur_tags
+        printentry(db, new_tags, showpass=args.z)
+        save(db)
+    elif args.command == 'undo':
+        lock()
+        db = load(nonempty=True)
+        tags = picktags(db, args.tags, arc=args.a)
+        rev = pickrev(db, tags, args.r, required=True)
+        printinfo('before undo:')
+        printentry(db, tags, showpass=args.z, showold=True)
+        timetravel(db, tags, rev)
+        printinfo('after undo:')
+        printentry(db, tags, showpass=args.z, showold=True)
+        save(db)
+    elif args.command == 'forget':
+        lock()
+        db = load(nonempty=True)
+        tags = picktags(db, args.tags, arc=args.a)
+        rev = pickrev(db, tags, args.r, required=True)
+        if rev >= len(db[tags]) - 1:
+            err('nothing to forgive')
+        printinfo('before forgetting:')
+        printentry(db, tags, showpass=args.z, showold=True)
+        forget(db, tags, rev)
+        printinfo('after forgetting:')
+        printentry(db, tags, showpass=args.z, showold=True)
+        save(db)
+    elif args.command == 'ls':
+        db = load(nonempty=True)
+        options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
+        tags_list = search(args.tags, options=options)
+        printinfo('listing...')
+        for tags in tags_list:
+            printentry(db, tags, showpass=args.z, showold=args.o)
+    elif args.command == 'chpass':
+        lock()
+        db = load()
+        save(db)
+    else:
+        err(f'unknown command "{args.command}"')
+except KeyboardInterrupt:
+    printwarn('received keyboard interrupt.  exiting...')
+except EOFError:
+    printwarn('received end of file.  exiting...')
