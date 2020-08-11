@@ -12,6 +12,7 @@ import time
 import secrets
 import atexit
 import getpass
+import base64
 
 #######################################
 #                             __      #
@@ -67,30 +68,37 @@ THEME = {
 
 KEY_TAGS = 'tags'
 KEY_PASS = 'password'
+KEY_DATAB64 = 'datab64s'
 KEY_NOTE = 'note'
 KEY_TIME = 'timestamp'
 KEY_ARC = 'archived'
 
-def frmtpass(password, showpass):
+def frmtpass(password, showpass, limit):
     """formats passwords based on its visibility setting"""
+    if password is None:
+        return None
     if showpass:
-        return '{PASS}{}{CLR}'.format(password, **THEME)
+        summary = ''
+        if limit and len(password) > limit:
+            summary = f'... ({len(password)} letters)'
+            password = password[:limit]
+        return '{PASS}{}{CLR}{}'.format(password, summary, **THEME)
     return '**********'
 
 def frmtask(msg):
-    return '{PROMPT}< {}{CLR} '.format( msg, **THEME)
+    return '{PROMPT}< {}{CLR} '.format(msg, **THEME)
 
 def printinfo(msg):
-    sys.stdout.write('{INFO}*{CLR} {}\n'.format(msg, **THEME))
-    sys.stdout.flush()
+    sys.stderr.write('{INFO}*{CLR} {}\n'.format(msg, **THEME))
+    sys.stderr.flush()
 
 def printwarn(msg):
     sys.stderr.write('{WARN}*{CLR} {}\n'.format(msg, **THEME))
     sys.stderr.flush()
 
 def printout(msg):
-    sys.stdout.write('  {}\n'.format(msg))
-    sys.stdout.flush()
+    sys.stderr.write('  {}\n'.format(msg))
+    sys.stderr.flush()
 
 def err(msg, exit=True):
     sys.stderr.write('{ERR}*{CLR} {}\n'.format(msg, **THEME))
@@ -110,17 +118,19 @@ def printentry(db, tags, showpass=False, showold=False):
         d = {'r'    : r,
             'sp'    : '  ' if r else ' ',
             't'     : db[tags][r][KEY_TAGS],
-            'p'     : frmtpass(db[tags][r][KEY_PASS], showpass),
-            'n'     : db[tags][r][KEY_NOTE],
+            'pass'  : frmtpass(db[tags][r][KEY_PASS], showpass, None),
+            'data'  : frmtpass(db[tags][r][KEY_DATAB64], showpass, 30),
+            'note'  : db[tags][r][KEY_NOTE],
             'ts'    : time.ctime(db[tags][r][KEY_TIME])}
         if db[tags][r][KEY_ARC]:
             printout('{sp}{ARC}archived{CLR}'.format(**d, **THEME))
         if r:
-            printout('{sp}{KEY}revision :{CLR} {r}'.format(**d, **THEME))
-            printout('{sp}{KEY}tags     :{CLR} {t}'.format(**d, **THEME))
-        printout('{sp}{KEY}password :{CLR} {p}'.format(**d, **THEME))
-        printout('{sp}{KEY}note     :{CLR} {n}'.format(**d, **THEME))
-        printout('{sp}{KEY}timestamp:{CLR} {ts}\n'.format(**d, **THEME))
+            printout('{sp}{KEY}revision  :{CLR} {r}'.format(**d, **THEME))
+            printout('{sp}{KEY}tags      :{CLR} {t}'.format(**d, **THEME))
+        printout('{sp}{KEY}password  :{CLR} {pass}'.format(**d, **THEME))
+        printout('{sp}{KEY}data (b64):{CLR} {data}'.format(**d, **THEME))
+        printout('{sp}{KEY}note      :{CLR} {note}'.format(**d, **THEME))
+        printout('{sp}{KEY}timestamp :{CLR} {ts}\n'.format(**d, **THEME))
 
 def run(cmd, retry=False, stdin=None, stdout=subprocess.PIPE):
     """run an external command"""
@@ -182,21 +192,32 @@ def genpass(length, psetname, showpass):
     while True:
         password = ''.join(secrets.choice(pset) for i in range(0, length))
         if showpass:
-            printout(frmtpass(password, showpass))
+            printout(frmtpass(password, showpass, None))
             ans = input(frmtask('happy? [y/N]'))
             if ans == 'y':
                 return password
         else:
             return password
 
-def newpass(gen, manual, showpass, required=False):
+def readdata():
+    """read binary data from stdin"""
+    printinfo('reading binary data from stdin...')
+    data = sys.stdin.buffer.read()
+    datab64s = base64.b64encode(data).decode()
+    return datab64s
+
+def newpass(gen, manual, stdin, showpass, required=False):
+    password = None
+    datab64s = None
     if gen is not None:
-        return genpass(gen[0], gen[1], showpass)
+        password = genpass(gen[0], gen[1], showpass)
     if manual:
-        return askpass()
-    if required:
-        err('password is required')
-    return None
+        password = askpass()
+    if stdin:
+        datab64s = readdata()
+    if required and password is None and datab64s is None:
+        err('password, or key, is required')
+    return (password, datab64s)
 
 def newtags(tags, required=False):
     """picks a new set of tags"""
@@ -252,11 +273,11 @@ def save(d):
             pass
 
 def clip(db, tags, rev):
-    """copy entry from db into clipboard"""
-    printinfo('copying password...')
-    if rev is None:
-        rev = 0
+    """copy password from db into clipboard"""
     password = db[tags][rev][KEY_PASS]
+    if password is None:
+        err('this entry does not have a password')
+    printinfo('copying password...')
     run(CLIPCMD, stdin=password.encode(), stdout=None)
     printinfo(f'uncopying in {COPYLIFE} seconds...')
     try:
@@ -265,6 +286,15 @@ def clip(db, tags, rev):
         printwarn('received keyboard interrupt.')
     printinfo('uncopying...')
     run(CLIPCMD, stdin=COPYDEL.encode(), stdout=None)
+
+def cat(db, tags, rev):
+    """print data from db into stdout"""
+    datab64s = db[tags][rev][KEY_DATAB64]
+    if datab64s is None:
+        err('this entry does not have data')
+    printinfo('printing data...')
+    data = base64.b64decode(datab64s)
+    sys.stdout.buffer.write(data)
 
 def picktags(db, query, arc=False):
     """picks a unique tags entry"""
@@ -301,11 +331,11 @@ def pickrev(db, tags, rev, required=False):
         except ValueError:
             printwarn('revision must be an integer')
 
-def add(db, tags, password, note):
+def add(db, tags, password, datab64s, note):
     """add a new entry from db"""
     printinfo('adding entry...')
-    entry = {KEY_TAGS:tags, KEY_PASS:password, KEY_NOTE:note,
-        KEY_TIME:time.time(), KEY_ARC:False}
+    entry = {KEY_TAGS:tags, KEY_PASS:password, KEY_DATAB64:datab64s,
+        KEY_NOTE:note, KEY_TIME:time.time(), KEY_ARC:False}
     if tags in db:
         printwarn(f'"{tags}" exists.  additing as a new revision...')
         db[tags].insert(0, entry)
@@ -342,14 +372,16 @@ def timetravel(db, tags, rev):
     db[tags].insert(0, tmp)
     db[tmp[KEY_TAGS]] = db.pop(tags)
 
-def modify(db, cur_tags, new_tags, password, note):
+def modify(db, cur_tags, new_tags, password, datab64s, note):
     """modify an entry from db"""
     printinfo('modifying...')
     tmp = dict(db[cur_tags][0])
     if new_tags is not None:
         tmp[KEY_TAGS] = new_tags
     if password is not None:
-        tmp[KEY_PASS] = password
+        tmp[KEY_PASS] = None if password == '' else password
+    if datab64s is not None:
+        tmp[KEY_DATAB64] = None if datab64s == '' else datab64s
     if note is not None:
         tmp[KEY_NOTE] = None if note == '' else note
     tmp[KEY_TIME] = time.time()
@@ -368,8 +400,10 @@ def forget(db, tags, retain):
 # arguments are specified by their named arguments to `add_argument`.
 # 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
-    ['get', ['tags', '-r', '-a', '-z'],
-        {'help':'load a password to clipboard'}],
+    ['cp', ['tags', '-r', '-a', '-z'],
+        {'help':'copy a password into clipboard'}],
+    ['cat', ['tags', '-r', '-a', '-z'],
+        {'help':'print password into stdout'}],
     ['add', ['tags', 'PASSWORD', '-n', '-z'],
         {'help':'add an entry'}],
     ['del', ['tags', '-a', '-z'],
@@ -412,6 +446,8 @@ for cmd_name, cmd_args, cmd_named in allcmds :
                 help='generate a new LEN-long password from SET')
             muex.add_argument('-m', action='store_true',
                 help='manually define password')
+            subp.add_argument('-i', action='store_true',
+                help='key via stdin (e.g. private key, btc wallet.dat)')
         else:
             subp.add_argument(arg, **allargs[arg])
 args = parser.parse_args()
@@ -430,19 +466,23 @@ try:
         sys.stderr.write(banner)
         sys.stderr.flush()
         parser.print_help()
-    elif args.command == 'get':
+    elif args.command in {'cp', 'cat'}:
         db = load(nonempty=True)
         tags = picktags(db, args.tags)
-        rev = pickrev(db, tags, args.r)
-        printinfo('entry to load into clipboard:')
+        rev = pickrev(db, tags, args.r, required=False)
+        printinfo('entry to load:')
         printentry(db, tags, showpass=args.z)
-        clip(db, tags, rev)
+        if args.command == 'cp':
+            clip(db, tags, rev)
+        else:
+            cat(db, tags, rev)
     elif args.command == 'add':
         tags = newtags(args.tags, required=True)
-        password = newpass(args.g, args.m, args.z, required=True)
+        password, datab64s = newpass(args.g, args.m, args.i, args.z,
+            required=True)
         lock()
         db = load()
-        add(db, tags, password, args.n)
+        add(db, tags, password, datab64s, args.n)
         printinfo('added entry:')
         printentry(db, tags, showpass=args.z)
         save(db)
@@ -464,15 +504,15 @@ try:
         save(db)
     elif args.command == 'mod':
         new_tags = newtags(args.t)
-        password = newpass(args.g, args.m, args.z)
-        if {new_tags, password, args.n} == {None}:
+        password, datab64s = newpass(args.g, args.m, args.i, args.z)
+        if {new_tags, password, datab64s, args.n} == {None}:
             err('no changes requested')
         lock()
         db = load(nonempty=True)
         cur_tags = picktags(db, args.tags, arc=args.a)
         printinfo('entry to modify:')
         printentry(db, cur_tags, showpass=args.z)
-        modify(db, cur_tags, new_tags, password, args.n)
+        modify(db, cur_tags, new_tags, password, datab64s, args.n)
         printinfo('entry after modification:')
         if new_tags is None:
             new_tags = cur_tags
