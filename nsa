@@ -299,6 +299,43 @@ def save(db, dbpass):
         except FileNotFoundError:
             pass
 
+def picktags(db, query, arc=False):
+    """picks a unique tags entry"""
+    options = [t for t in db if db[t][0][KEY_ARC] is arc]
+    while True:
+        matches = search(query, options)
+        if len(matches) == 0:
+            printwarn('no match.  available tags list:')
+            for o in options:
+                sys.stderr.write(f'    {o}\n')
+        elif len(matches) > 1:
+            printwarn('too many matched tags:')
+            for o in matches:
+                sys.stderr.write(f'    {o}\n')
+        elif len(matches) == 1:
+            printinfo(f'matched: {matches[0]}')
+            return matches[0]
+        query = ttyinput(frmtask('specify query tags:'))
+
+def pickrev(db, tags, rev, required=False):
+    "pick a unique revision"""
+    if not required:
+        if rev is None:
+            printinfo('revision defaulting to 0...')
+            return 0
+        return rev
+    revs = range(0, len(db[tags]))
+    while True:
+        if rev in revs:
+            return rev
+        rev = ttyinput(frmtask(f'pick REV in {{0, ..., {len(revs)-1}}}:'))
+        try:
+            rev = int(rev)
+            if rev < 0:
+                printwarn('revision must be positive')
+        except ValueError:
+            printwarn('revision must be an integer')
+
 def printentry(db, tags, showpass=False, showold=False):
     """print a password entry"""
     sys.stderr.write('  {TAGS}{}{CLR}{ARC}{}{CLR}\n'.format(
@@ -355,43 +392,6 @@ def cat(db, tags, rev):
     printinfo('printing data...')
     data = base64.b64decode(datab64s)
     sys.stdout.buffer.write(data)
-
-def picktags(db, query, arc=False):
-    """picks a unique tags entry"""
-    options = [t for t in db if db[t][0][KEY_ARC] is arc]
-    while True:
-        matches = search(query, options)
-        if len(matches) == 0:
-            printwarn('no match.  available tags list:')
-            for o in options:
-                sys.stderr.write(f'    {o}\n')
-        elif len(matches) > 1:
-            printwarn('too many matched tags:')
-            for o in matches:
-                sys.stderr.write(f'    {o}\n')
-        elif len(matches) == 1:
-            printinfo(f'matched: {matches[0]}')
-            return matches[0]
-        query = ttyinput(frmtask('specify query tags:'))
-
-def pickrev(db, tags, rev, required=False):
-    "pick a unique revision"""
-    if not required:
-        if rev is None:
-            printinfo('revision defaulting to 0...')
-            return 0
-        return rev
-    revs = range(0, len(db[tags]))
-    while True:
-        if rev in revs:
-            return rev
-        rev = ttyinput(frmtask(f'pick REV in {{0, ..., {len(revs)-1}}}:'))
-        try:
-            rev = int(rev)
-            if rev < 0:
-                printwarn('revision must be positive')
-        except ValueError:
-            printwarn('revision must be an integer')
 
 def add(db, tags, username, password, datab64s, note):
     """add a new entry from db"""
