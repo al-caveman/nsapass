@@ -137,6 +137,10 @@ def search(query, options):
             pass
     return sorted(matches)
 
+def ttyinput(prompt):
+    sys.stdin = open('/dev/tty')
+    return input(prompt)
+
 def askpass(name):
     """prompts users for password"""
     while True:
@@ -163,7 +167,7 @@ def genpass(length, psetname, showpass):
         password = ''.join(secrets.choice(pset) for i in range(0, length))
         if showpass:
             sys.stderr.write(frmtpass(password, showpass) + '\n')
-            ans = input(frmtask('happy? [y/N]'))
+            ans = ttyinput(frmtask('happy? [y/N]'))
             if ans == 'y':
                 return password
         else:
@@ -171,12 +175,13 @@ def genpass(length, psetname, showpass):
 
 def readdata(filein):
     """read binary data from stdin"""
-    printinfo(f'reading binary data from "{filein}"...')
     if filein == '-':
+        printinfo(f'reading binary data from stdin...')
         data = sys.stdin.buffer.read()
         if len(data) == 0:
             exit('no data read from stdin')
     else:
+        printinfo(f'reading binary data from "{filein}"...')
         try:
             with open(filein, 'rb') as f:
                 data = f.read()
@@ -205,7 +210,7 @@ def newtags(tags, required=False):
     while True:
         tags = cleanwords(tags)
         if tags is None:
-            tags = input(frmtask('specify tags:'))
+            tags = ttyinput(frmtask('specify tags:'))
         else:
             return tags
 
@@ -276,7 +281,7 @@ def save(db, dbpass):
     if dbpass is None:
         dbpass = askpass('database')
     while True:
-        ans = input(frmtask('save? [y/n]'))
+        ans = ttyinput(frmtask('save? [y/n]'))
         if ans == 'y':
             break
         if ans == 'n':
@@ -367,7 +372,7 @@ def picktags(db, query, arc=False):
         elif len(matches) == 1:
             printinfo(f'matched: {matches[0]}')
             return matches[0]
-        query = input(frmtask('specify query tags:'))
+        query = ttyinput(frmtask('specify query tags:'))
 
 def pickrev(db, tags, rev, required=False):
     "pick a unique revision"""
@@ -380,7 +385,7 @@ def pickrev(db, tags, rev, required=False):
     while True:
         if rev in revs:
             return rev
-        rev = input(frmtask(f'pick REV in {{0, ..., {len(revs)-1}}}:'))
+        rev = ttyinput(frmtask(f'pick REV in {{0, ..., {len(revs)-1}}}:'))
         try:
             rev = int(rev)
             if rev < 0:
