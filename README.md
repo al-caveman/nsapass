@@ -38,9 +38,14 @@ for these reasons:
 
 plus, extra goodies:
 
-- **advanced tag-based hierarchical search!**  _only_ minimum typing is
-  needed to identify an entry — so fast even a _sloth_ would feel like a
-  fox!
+- **super fast usage!**  thanks to the _advanced tag-based hierarchical
+  search_, you can retrieve entries _ridiculously_ fast.  so fast a sloth
+  using nsapass would appear faster than a fox using keepass!  e.g. say
+  you'd like to retrieve an entry with the tags `caveman protonmail` and it
+  is the only entry in the database starting with `c`, then you can just
+  refer to it by `c`!  let's face it, the bottleneck with password
+  managers, in reality, is the user interface.  this is why nsapass is
+  super fast, because it solves the real problem.
 - **flexible:**  yup.  just look at the configs part of `nsa` file.
 - **looks pretty:**  look at the beautiful colors!
 
