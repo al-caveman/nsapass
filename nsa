@@ -390,6 +390,8 @@ def cp(db, tags, rev, field, copy=True):
     if not copy:
         printinfo(f'stdout is piped.  printing {field} to stdout...')
         return sys.stdout.write(value)
+    # dirty hack to make it work.  ticket open:
+    # https://github.com/pexpect/pexpect/issues/657
     cpcmd = f"echo -n {shlex.quote(value)} | {CLIPCMD}"
     delcmd = f"echo -n {shlex.quote(COPYDEL)} | {CLIPCMD}"
     run('sh', stdin=cpcmd, exitonerror=True)
