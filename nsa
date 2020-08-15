@@ -375,26 +375,21 @@ def printentry(db, tags, showpass=False, showold=False):
             sys.stderr.write('{}{KEY}{:9}:{CLR} {}\n'.format(
                 indent, key, value, **THEME))
 
-def cp(db, tags, rev, field):
+def cp(db, tags, rev, field, copy=True):
     """copy a field from db into clipboard"""
     value = db[tags][rev][field]
     if value is None:
-        printwarn(f'{field} is empty.  skipping...')
-        return
+        exit(f'{field} is empty')
+    if field == KEY_DATAB64:
+        return sys.stdout.buffer.write(base64.b64decode(value))
+    if not copy:
+        printinfo(f'stdout is piped.  printing {field} to stdout...')
+        return sys.stdout.write(value)
     cpcmd = f"echo -n {shlex.quote(value)} | {CLIPCMD}"
     delcmd = f"echo -n {shlex.quote(COPYDEL)} | {CLIPCMD}"
     run('sh', stdin=cpcmd, exitonerror=True)
     printinfo(f'{field} copied for {COPYLIFE} seconds', counter=COPYLIFE)
     run('sh', stdin=delcmd, exitonerror=True)
-
-def cat(db, tags, rev):
-    """print data from db into stdout"""
-    datab64s = db[tags][rev][KEY_DATAB64]
-    if datab64s is None:
-        exit('this entry does not have data')
-    printinfo('printing data...')
-    data = base64.b64decode(datab64s)
-    sys.stdout.buffer.write(data)
 
 def add(db, tags, username, password, datab64s, note):
     """add a new entry from db"""
@@ -464,9 +459,9 @@ def forget(db, tags, retain):
 # 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
     ['cp', ['tags', '-r', '-a', '-z'],
-        {'help':'copy a password into clipboard'}],
+        {'help':'copy username/password.  print password if piped'}],
     ['cat', ['tags', '-r', '-a', '-z'],
-        {'help':'print password into stdout'}],
+        {'help':'print key file'}],
     ['add', ['tags', '-u', 'PASSWORD', '-n', '-z'],
         {'help':'add an entry'}],
     ['del', ['tags', '-a', '-z'],
@@ -536,11 +531,11 @@ try:
         rev = pickrev(db, tags, args.r)
         printinfo('entry to load:')
         printentry(db, tags, showpass=args.z)
-        cp(db, tags, rev, 'username')
+        cp(db, tags, rev, KEY_USERNAME)
         if args.command == 'cp':
-            cp(db, tags, rev, 'password')
-        else:
-            cat(db, tags, rev)
+            cp(db, tags, rev, KEY_PASS, copy=sys.stdout.isatty())
+        elif args.command == 'cat':
+            cp(db, tags, rev, KEY_DATAB64, copy=False)
 
     elif args.command == 'add':
         tags = newtags(args.tags, required=True)
