@@ -6,7 +6,6 @@ import argparse
 import os
 import sys
 import string
-import textwrap
 import json
 import subprocess
 import time
@@ -15,6 +14,7 @@ import atexit
 import getpass
 import pexpect
 import base64
+import textwrap
 
 #######################################
 #                             __      #
@@ -117,6 +117,15 @@ def cleanwords(words):
         words = ' '.join(words)
     words = ' '.join(words.split())
     return None if words == '' else words
+
+def wrap(text, subseq_indent):
+    termwidth = os.get_terminal_size()[0]
+    width = termwidth - len(subseq_indent)
+    wrapped_list = textwrap.wrap(text, width)
+    first_line = wrapped_list[0] + '\n'
+    other_lines = '\n'.join(wrapped_list[1:])
+    other_lines_indent = textwrap.indent(other_lines, subseq_indent)
+    return first_line + other_lines_indent
 
 def search(query, options):
     """searches for a string.  query can be a tags list or tags string"""
@@ -361,12 +370,9 @@ def printentry(db, tags, showpass=False, showold=False):
             elif key == KEY_TIME:
                 value = time.ctime(value)
             elif key == KEY_NOTE:
-                termwidth = os.get_terminal_size()[0]
                 keywidth = 11
-                width = termwidth - len(indent) - keywidth
                 subseq_indent = indent + ' ' * keywidth
-                value = textwrap.fill(
-                    value, width, subsequent_indent=subseq_indent)
+                value = wrap(value, subseq_indent)
             sys.stderr.write('{}{KEY}{:9}:{CLR} {}\n'.format(
                 indent, key, value, **THEME))
 
