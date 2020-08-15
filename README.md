@@ -1,7 +1,6 @@
 # what is nsapass?
-nsapass is the name of the project which makes an executable named `nsa`,
-which (the latter) is the simplest, most secure, passwords manager that i
-know of, for these reasons:
+nsapass  is the simplest, most secure, passwords manager that i know of,
+for these reasons:
 
 - **minimum segfaults and funny bugs:**  written _entirely_ in python.  you
   can be pretty sure that undefined behaviour due to improper memory access
@@ -16,10 +15,10 @@ know of, for these reasons:
   `scrypt` is _super_ hard to bruteforce and other attacks!
 
 - **super _ultra_ easy to audit:**  written in a _single_ python script
-  made of _only_ about ~`600` lines of code!  no separate config file, so
-  those approx ~`600` lines of code include the configs!  the configs are
+  made of _only_ about ~`650` lines of code!  no separate config file, so
+  those approx ~`650` lines of code include the configs!  the configs are
   done in a _sucklessy_ kind of approach where you edit some variables in
-  the nsapass file itself.
+  the `nsa` file itself.
 
   the passwords database itself is a simple json text file!  of course,
   this entire json file is encrypted, but thanks to the _extreme_
@@ -42,7 +41,7 @@ plus, extra goodies:
 - **advanced tag-based hierarchical search!**  _only_ minimum typing is
   needed to identify an entry — so fast even a _sloth_ would feel like a
   fox!
-- **flexible:**  yup.  just look at the configs part of nsapass file.
+- **flexible:**  yup.  just look at the configs part of `nsa` file.
 - **looks pretty:**  look at the beautiful colors!
 
 # alternatives to nsapass
@@ -58,7 +57,7 @@ how can _you_ know that funny memory bugs don't exist in `keepassxc`!?
 would _you_ put _faith_ in keepassxc's devs that their app is free of
 segfaults?  _no way!_ no thanks sir! _keep_ your keepass to yourself.
 i'm going to rather rely on the _many_ highly skilled monkeys at _python_
-by coding an alternative in ~`600` lines of python code (inc. configs).
+by coding an alternative in ~`650` lines of python code (inc. configs).
 
 to be more exact, i used to use the command `keepassxc-cli` to load
 passwords into my clipboard, then paste them manually in password fields as
@@ -71,16 +70,23 @@ the html5?  layers of horror upon horror.  so yeah, browser integration?
 nothx!
 
 so, yeah, i just used `keepassxc-cli`, and then kept suffering until i
-decided to finally write ~`600` lines of python (i.e. nsapass) to end this
+decided to finally write ~`650` lines of python (i.e. nsapass) to end this
 misery and it ended.  and now it's _your_ time, do _you_ want to end your
 misery too?  it's easy!  just `git clone` this enjoy the taste of liberty!
 
 # how to use?
 
-## installation and configuration
-permanent configs are stored in nsapass itself; just edit it.  for
-run-time configs run `nsa -h` and follow along.  you can get further
-help from the subcommands by, say, `nsa cp -h`.
+## installation
+just execute `nsa`.  to make it convenient, perhaps copy it somewhere in
+`PATH`.  that's all.
+
+no fancy shmancy enterprise-grade frameworky end-to-endy corporaty
+nonsense.  just straight _"want it?  use it!"_.
+
+## config
+permanent configs are stored in `nsa` file itself; just edit it.  for
+run-time configs run `nsa -h` and follow along.  you can get further help
+from the subcommands by, say, `nsa cp -h`.
 
 ## general guidelines
 
@@ -142,7 +148,8 @@ just need to call it `c g`!  i.e. the entry with its 1st tag starting by
 sloth can feel like a fox.  here is the _gorgeous_ output:
 <p align="center"><img src="pics/mini_tutorial_4.png"></p>
 
-moar commands await you! this is just the _beginning_!
+this is just the _beginning_.  i've made much more commands for you, _all_
+by myself<sup>*</sup>!
 <p align="center"><img src="pics/morecommands.png"></p>
 
 # dependencies
@@ -161,3 +168,7 @@ see your patch.  if they it is sensible i'll merge it.  if i like your
 idea, i may even implemented it _myself_, by my very own hands, for _free_
 and _git commit-pull-merge-push_ it or me _and_ for you!  because i also
 care about _you_ and i want _you_ to be happy as well.
+
+----
+
+<sup>* and [int-e](https://github.com/int-e)</sup>
