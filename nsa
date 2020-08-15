@@ -122,10 +122,7 @@ def wrap(text, subseq_indent):
     termwidth = os.get_terminal_size()[0]
     width = termwidth - len(subseq_indent)
     wrapped_list = textwrap.wrap(text, width)
-    first_line = wrapped_list[0] + '\n'
-    other_lines = '\n'.join(wrapped_list[1:])
-    other_lines_indent = textwrap.indent(other_lines, subseq_indent)
-    return first_line + other_lines_indent
+    return f'\n{subseq_indent}'.join(wrapped_list)
 
 def search(query, options):
     """searches for a string.  query can be a tags list or tags string"""
