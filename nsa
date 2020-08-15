@@ -16,6 +16,8 @@ import pexpect
 import base64
 import shlex
 import textwrap
+import tempfile
+import signal
 
 #######################################
 #                             __      #
@@ -23,11 +25,14 @@ import textwrap
 #                            ( ._> /  #
 #######################################
 
+# location of pid dir
+PID = '/tmp/nsapass'
+
 # location of encrypted passwords db
 DB = os.path.expanduser('~/.local/share/nsapass/db.enc')
 
 # how many seconds should copied passwords remain in the clipboard?
-COPYLIFE = 5
+COPYLIFE = 30
 
 # what to copy in order to delete previous copy?
 COPYDEL = '~\o deleted by nsapass™ o/~'
@@ -102,7 +107,7 @@ def printinfo(msg, counter=0):
             time.sleep(1)
         sys.stderr.write('\n')
     except KeyboardInterrupt:
-        printwarn('expiring counter..')
+        printwarn('expiring counter...')
 
 def printwarn(msg):
     sys.stderr.write('{WARN}*{CLR} {}\n'.format(msg, **THEME))
@@ -477,7 +482,12 @@ allcmds = [
     ['ls', ['tags', '-o', '-a', '-z'],
         {'help':'view entries'}],
     ['chpass', [],
-        {'help':"change databases's password"}]
+        {'help':"change databases's password"}],
+    ['2', [],
+        {'help':"send signal 2 (SIGINT) to all nsapass processes. "
+            "this is useful to use keyboard shortcuts to cause nsapass to "
+            "immediately move to copy passwords without needing to wait "
+            "for the timer to expire for the username"}]
 ]
 allargs = {
     'tags': {'metavar':'TAG', 'type':str, 'nargs':'*',
@@ -524,8 +534,25 @@ try:
         sys.stderr.write(banner)
         sys.stderr.flush()
         parser.print_help()
+        sys.exit()
 
-    elif args.command in {'cp', 'cat'}:
+    if args.command == '2': # send SIGINT to pids
+        found = False
+        for d in os.listdir(PID):
+            found = True
+            with open(f'{PID}/{d}', 'rb') as f:
+                pid = int(f.read())
+                printinfo(f'sending SIGINT to process {pid}...')
+                os.kill(pid, signal.SIGINT)
+        if not found:
+            exit('no PIDs found')
+    else: # create pid file
+        os.makedirs(PID, exist_ok=True)
+        f = tempfile.NamedTemporaryFile(dir=PID)
+        f.write(str(os.getpid()).encode())
+        f.flush()
+
+    if args.command in {'cp', 'cat'}:
         db, _ = load(nonempty=True)
         tags = picktags(db, args.tags)
         rev = pickrev(db, tags, args.r)
@@ -635,6 +662,7 @@ try:
         lock()
         db, _ = load()
         save(db, None)
+
     else:
         exit(f'unknown command "{args.command}"')
 except KeyboardInterrupt:
