@@ -14,6 +14,7 @@ import atexit
 import getpass
 import pexpect
 import base64
+import shlex
 import textwrap
 
 #######################################
@@ -109,6 +110,7 @@ def printwarn(msg):
 
 def exit(msg):
     sys.stderr.write('{ERR}*{CLR} {}\n'.format(msg, **THEME))
+    sys.stderr.write('{ERR}*{CLR} {}\n'.format('exiting...', **THEME))
     sys.stderr.flush()
     sys.exit(1)
 
@@ -379,13 +381,11 @@ def cp(db, tags, rev, field):
     if value is None:
         printwarn(f'{field} is empty.  skipping...')
         return
-    value_cleaned = value.replace("'", "\'")
-    del_cleaned = COPYDEL.replace("'", "\'")
-    cpvalue = f"echo -n '{value_cleaned}' | {CLIPCMD}"
-    delvalue = f"echo -n '{del_cleaned}' | {CLIPCMD}"
-    run('sh', stdin=cpvalue, exitonerror=True)
+    cpcmd = f"echo -n {shlex.quote(value)} | {CLIPCMD}"
+    delcmd = f"echo -n {shlex.quote(COPYDEL)} | {CLIPCMD}"
+    run('sh', stdin=cpcmd, exitonerror=True)
     printinfo(f'{field} copied for {COPYLIFE} seconds', counter=COPYLIFE)
-    run('sh', stdin=delvalue, exitonerror=True)
+    run('sh', stdin=delcmd, exitonerror=True)
 
 def cat(db, tags, rev):
     """print data from db into stdout"""
