@@ -249,11 +249,13 @@ def run(cmd, prompts=[], password=None, stdout=False, stdin=None,
         data = child.read() if stdout else None
     except pexpect.exceptions.TIMEOUT:
         exit('command took too long to print to stdout')
-    exitstatus = child.wait()
-    if exitstatus != 0:
-        msg = f'`{cmd}` returned {exitstatus}'
+    if child.isalive():
+        child.wait()
+    child.close()
+    if child.exitstatus != 0:
+        msg = f'`{cmd}` returned {child.exitstatus}'
         exit(msg) if exitonerror else printwarn(msg)
-    return data, exitstatus
+    return data, child.exitstatus
 
 def lock():
     """lock passwords database file"""
