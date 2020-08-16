@@ -133,6 +133,7 @@ def wrap(text, subseq_indent):
 
 def search(query, options):
     """searches for a string.  query can be a tags list or tags string"""
+    options.sort()
     query = cleanwords(query)
     printinfo(f'searching with "{query}"...')
     if query is None:
@@ -148,7 +149,7 @@ def search(query, options):
                 matches.append(o)
         except IndexError:
             pass
-    return sorted(matches)
+    return matches
 
 def ttyinput(prompt):
     sys.stdin = open('/dev/tty')
@@ -456,7 +457,6 @@ def modify(db, cur_tags, new_tags, username, password, datab64s, note):
 
 def forget(db, tags, retain):
     """forget the distant past of an entry from db"""
-    printwarn('forgetting distant memories...')
     db[tags] = db[tags][0:retain+1]
 
 # parse arguments
@@ -633,17 +633,19 @@ try:
         db, dbpass = load(nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
+        forgotten = False
         for tags in tags_list:
-            printinfo('before forgetting:')
-            printentry(db, tags, showpass=args.z, showold=True)
             rev = pickrev(db, tags, args.r)
-            if rev >= len(db[tags]) - 1:
-                printinfo('nothing to forget.  skipping...')
-            else:
+            if rev < len(db[tags]) - 1:
+                printinfo('before forgetting:')
+                printentry(db, tags, showpass=args.z, showold=True)
                 forget(db, tags, rev)
                 printwarn('after forgetting:')
                 printentry(db, tags, showpass=args.z, showold=True)
-            sys.stderr.write('\n')
+                sys.stderr.write('\n')
+                forgotten = True
+        if not forgotten:
+            exit('nothing to forget')
         save(db, dbpass)
 
     elif args.command == 'ls':
