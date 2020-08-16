@@ -153,6 +153,28 @@ just need to call it `c g`!  i.e. the entry with its 1st tag starting by
 sloth can feel like a fox.  here is the _gorgeous_ output:
 <p align="center"><img src="pics/mini_tutorial_4.png"></p>
 
+btw, did you know that you may execute `nsa 2` in a separate
+process, in order to send `SIGINT` signal to all `nsa cp` or `nsa cat`
+processes?  this is _very_ powerful and handy, because it allows you to
+configure shortcuts in your window management system to execute `nsa 2` in
+order to talk to other `nsa (cp|cat)` processes so that it moves on
+immediately to to copy the password, or to immediately delete the previous
+copies from the clipboard, all without needing to manually re-visit the
+terminal where `nsa (cp|cat)` is running to manually type `ctrl^c`.  very
+neat!  for example, in `i3`'s configs, i have added this key binding
+```
+bindsym $mod+i exec nsa 2
+```
+which makes my life _super_-mega-ultra easy.  basically, i run, say, `nsa
+cp c g` in a terminal, which puts my username (e.g. an email address) into
+my clipboard.  i then move to my browser and paste my cipboard's content
+into the username field.  finally, i just press `$mod+i` to signal to the
+`nsa cp c g` process _"psst! username is done, gimme the password now!"_.
+then i _immediately_ get the password and paste in the password field in my
+browser.  all without needing to jump around terminals!  no _need_ for
+browser integration when it is _this_ simple!  neat, isn't it?
+<p align="center"><img src="pics/mini_tutorial_5.png"></p>
+
 this is just the _beginning_.  i've made much more commands for you, _all_
 by myself<sup>*</sup>!
 <p align="center"><img src="pics/morecommands.png"></p>
