@@ -335,7 +335,6 @@ def pickrev(db, tags, rev, required=False):
     "pick a unique revision"""
     if not required:
         if rev is None:
-            printinfo('revision defaulting to 0...')
             return 0
         return rev
     revs = range(0, len(db[tags]))
