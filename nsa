@@ -253,7 +253,7 @@ def run(cmd, prompts=[], password=None, stdout=False, stdin=None,
         child.wait()
     child.close()
     if child.exitstatus != 0:
-        msg = f'`{cmd}` returned {child.exitstatus}'
+        msg = f'`{cmd}` returned {child.exitstatus}: {child.before}'
         exit(msg) if exitonerror else printwarn(msg)
     return data, child.exitstatus
 
