@@ -634,6 +634,9 @@ try:
         db, dbpass = load(nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
+        if args.r is None:
+            printinfo('no revision is given.  assuming 5...')
+            args.r = 5
         forgotten = False
         for tags in tags_list:
             rev = pickrev(db, tags, args.r)
