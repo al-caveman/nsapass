@@ -46,11 +46,11 @@ SETS = {
 }
 
 # command to load passwords db
-DECCMD = 'scrypt dec -M 1000000000 {}'
+DECCMD = 'scrypt dec -M 500000000 {}'
 DECPROMPTS = ['Please enter passphrase: ']
 
 # command to save passwords db (must read plaintext from stdin)
-ENCCMD = 'scrypt enc -M 1000000000 - {}'
+ENCCMD = 'scrypt enc -M 500000000 - {}'
 ENCPROMPTS = ['Please enter passphrase: ', 'Please confirm passphrase: ']
 
 # command to paste into clipboard (must accept data from stdin)
