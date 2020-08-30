@@ -386,7 +386,7 @@ def cp(db, tags, rev, field, copy=True):
     """copy a field from db into clipboard"""
     value = db[tags][rev][field]
     if value is None:
-        exit(f'{field} is empty')
+        printwarn(f'{field} is empty')
     if field == KEY_DATAB64:
         return sys.stdout.buffer.write(base64.b64decode(value))
     if not copy:
