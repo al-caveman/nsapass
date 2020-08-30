@@ -387,11 +387,14 @@ def cp(db, tags, rev, field, copy=True):
     value = db[tags][rev][field]
     if value is None:
         printwarn(f'{field} is empty')
+        return
     if field == KEY_DATAB64:
-        return sys.stdout.buffer.write(base64.b64decode(value))
+        sys.stdout.buffer.write(base64.b64decode(value))
+        return
     if not copy:
         printinfo(f'stdout is piped.  printing {field} to stdout...')
-        return sys.stdout.write(value)
+        sys.stdout.write(value)
+        return
     # dirty hack to make it work.  ticket open:
     # https://github.com/pexpect/pexpect/issues/657
     cpcmd = f"echo -n {shlex.quote(value)} | {CLIPCMD}"
