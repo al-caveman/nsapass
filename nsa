@@ -150,15 +150,16 @@ def search(query, options):
         for tag in tags:
             if i < len(words):
                 if matching_began:
-                    if tag.find(words[i]) != 0:
+                    if tag.find(words[i]) == 0:
+                        matched = True
+                        i += 1
+                    elif tag.find(words[i]) != 0:
                         matched = False
-                        break
-                    i += 1
                 elif tag.find(words[i]) == 0:
                     matching_began = True
                     matched = True
                     i += 1
-        if matched:
+        if matched and i == len(words):
             matches.append(o)
     return matches
 
