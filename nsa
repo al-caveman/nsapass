@@ -144,11 +144,22 @@ def search(query, options):
     matches = []
     for o in options:
         tags = o.split()
-        try:
-            if {tags[i].find(w) for i,w in enumerate(words)} == {0}:
-                matches.append(o)
-        except IndexError:
-            pass
+        matched = False
+        matching_began = False
+        i = 0
+        for tag in tags:
+            if i < len(words):
+                if matching_began:
+                    if tag.find(words[i]) != 0:
+                        matched = False
+                        break
+                    i += 1
+                elif tag.find(words[i]) == 0:
+                    matching_began = True
+                    matched = True
+                    i += 1
+        if matched:
+            matches.append(o)
     return matches
 
 def ttyinput(prompt):
