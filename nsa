@@ -182,7 +182,7 @@ def genpass(length, psetname, showpass):
         length = int(length)
         if length < 1:
             exit(f'LEN "{length}" is not positive')
-    except TypeError:
+    except ValueError:
         exit(f'LEN "{length}" is not int')
     try:
         pset = SETS[psetname]
