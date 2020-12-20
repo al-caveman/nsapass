@@ -11,8 +11,8 @@ for these reasons:
   sensitive parts concerning encryption, decryption or access to clipboard,
   is entirely offloaded into other external apps of your choice in the
   _true_ spirit of the UNIX philosophy!  by default, the configuration
-  makes a _great_ choice by using `scrypt` for encryption and decryption.
-  `scrypt` is _super_ hard to bruteforce and other attacks!
+  makes a _great_ choice by using `ciphart` for encryption and decryption.
+  `ciphart` is _super_ hard to bruteforce and other attacks!
 
 - **super _ultra_ easy to audit:**  written in a _single_ python script
   made of _only_ about ~`650` lines of code!  no separate config file, so
@@ -34,7 +34,7 @@ for these reasons:
   also your _password_, which you use to decrypt the passwords database,
   never goes into nsapass.  you just talk to the external
   encryption/decryption app of your choice which you use (by default
-  `scrypt`).
+  `ciphart`).
 
 plus, extra goodies:
 
@@ -182,9 +182,8 @@ by myself<sup>*</sup>!
 # dependencies
 
 - python.
-- [pexpect](https://github.com/pexpect/pexpect).
 - any encryption/decryption app (by default
-  [`scrypt`](https://github.com/Tarsnap/scrypt)).
+  [`ciphart`](https://github.com/Al-Caveman/nsapass)).
 - any clipboard management app (by default
   [`xclip`](https://github.com/astrand/xclip)).
 

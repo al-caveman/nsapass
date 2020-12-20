@@ -1,7 +1,22 @@
 #!/usr/bin/python3
-# nsapass  Copyright (C) <2020>  <caveman>
-# licensed under GPLv3 for details read LICENSE in
+#
+# nsapass - a simple password manager.
+# Copyright (C) 2020 caveman
 # https://github.com/al-caveman/nsapass
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import argparse
 import os
 import sys
@@ -12,7 +27,6 @@ import time
 import secrets
 import atexit
 import getpass
-import pexpect
 import base64
 import shlex
 import textwrap
@@ -25,14 +39,17 @@ import signal
 #                            ( ._> /  #
 #######################################
 
+# encoding
+ENCODING = 'utf-8'
+
 # location of pid dir
 PID = '/tmp/nsapass'
 
 # location of encrypted passwords db
-DB = os.path.expanduser('~/.local/share/nsapass/db.enc')
+DB = os.path.expanduser('~/.local/share/nsapass/db.ciphart')
 
 # how many seconds should copied passwords remain in the clipboard?
-COPYLIFE = 30
+COPYLIFE = -1
 
 # what to copy in order to delete previous copy?
 COPYDEL = '~\o deleted by nsapass™ o/~'
@@ -45,20 +62,40 @@ SETS = {
         string.whitespace),
 }
 
-# command to load passwords db
-DECCMD = 'scrypt dec -M 500000000 {}'
-DECPROMPTS = ['Please enter passphrase: ']
+# command to load passwords db (must read password from stdin, and print
+# plaintext to stdout)
+DECCMD = 'ciphart -dsk -i {}'
+DECERRS = {
+    0   : None, # success code
+    2   : 'ciphart reported libsodium failure',
+    3   : 'ciphart reported argument parsing failure',
+    4   : 'ciphart reported io failure',
+    5   : 'ciphart reported memory allocation failure',
+    6   : 'ciphart reported threading failure',
+    7   : 'ciphart reported bad password or corrupted input',
+   '*'  : 'ciphart reported a general failure' # default error
+}
 
-# command to save passwords db (must read plaintext from stdin)
-ENCCMD = 'scrypt enc -M 500000000 - {}'
-ENCPROMPTS = ['Please enter passphrase: ', 'Please confirm passphrase: ']
+# command to save passwords db (must read password from stdin, then read
+# plain from stdin, then save output ciphertext to {})
+ENCCMD = 'ciphart -eszk -o {}'
+ENCERRS = {
+    0   : None, # success code
+    2   : 'ciphart reported libsodium failure',
+    3   : 'ciphart reported argument parsing failure',
+    4   : 'ciphart reported io failure',
+    5   : 'ciphart reported memory allocation failure',
+    6   : 'ciphart reported threading failure',
+    7   : 'ciphart reported bad password or corrupted input',
+   '*'  : 'ciphart reported a general failure' # default error
+}
 
 # command to paste into clipboard (must accept data from stdin)
 CLIPCMD = 'xclip -selection clipboard'
+CLIPERRS = {0 : None, '*' : 'general xclip error'}
 
 # theme
 THEME = {
-    'BANNER': '\33[0;90m',
     'INFO'  : '\33[1;32m',
     'WARN'  : '\33[1;33m',
     'ERR'   : '\33[1;31m',
@@ -76,6 +113,7 @@ THEME = {
 #             (devs only)               #
 #########################################
 
+VERSION = '3.0.0'
 KEY_TAGS = 'tags'
 KEY_USERNAME= 'username'
 KEY_PASS = 'password'
@@ -101,10 +139,12 @@ def printinfo(msg, counter=0):
     sys.stderr.write('{INFO}*{CLR} {}'.format(msg, **THEME))
     sys.stderr.flush()
     try:
-        for i in range(0, counter):
-            sys.stderr.write('.')
-            sys.stderr.flush()
+        while counter:
+            if counter > 0:
+                sys.stderr.write('.')
+                sys.stderr.flush()
             time.sleep(1)
+            counter -= 1
         sys.stderr.write('\n')
     except KeyboardInterrupt:
         printwarn('expiring counter...')
@@ -240,34 +280,27 @@ def newtags(tags, required=False):
         else:
             return tags
 
-def run(cmd, prompts=[], password=None, stdout=False, stdin=None,
-    exitonerror=False):
+def run(cmd, cmderrs, stdins=[], has_stdout=False, has_stderr=False,
+    exitonerror=False
+):
     """runs and interacts with external commands"""
+    stdout = subprocess.PIPE if has_stdout else None
+    stderr = subprocess.PIPE if has_stderr else None
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=stdout,
+        stderr=stderr, shell=True, encoding=ENCODING)
+    total_p_stdout = ''
+    for stdin in stdins:
+        p_stdout, _ = p.communicate(input=stdin)
+        if stdout:
+            total_p_stdout += p_stdout
+    f = exit if exitonerror else printwarn
+    r = p.returncode if p.returncode in cmderrs else '*'
     try:
-        child = pexpect.spawn(cmd, encoding='utf-8')
-    except pexpect.exceptions.ExceptionPexpect as e:
-        exit(f'pexpect exception: {e}')
-    for prompt in prompts:
-        try:
-            child.expect_exact(prompt)
-        except pexpect.exceptions.TIMEOUT:
-            exit(f'prompt "{prompt}" not matched')
-        child.sendline(password)
-    if stdin is not None:
-        child.sendline(stdin)
-        child.sendeof()
-        child.sendeof()
-    try:
-        data = child.read() if stdout else None
-    except pexpect.exceptions.TIMEOUT:
-        exit('command took too long to print to stdout')
-    if child.isalive():
-        child.wait()
-    child.close()
-    if child.exitstatus != 0:
-        msg = f'`{cmd}` returned {child.exitstatus}: {child.before}'
-        exit(msg) if exitonerror else printwarn(msg)
-    return data, child.exitstatus
+        if cmderrs[r] is not None:
+            f(cmderrs[r])
+    except KeyError:
+        f(f'unknown command return code "{p.returncode}"')
+    return total_p_stdout, p.returncode
 
 def lock():
     """lock passwords database file"""
@@ -289,7 +322,8 @@ def load(nonempty=False):
         cmd = DECCMD.format(DB)
         while True:
             dbpass = getpass.getpass(frmtask('database password:'))
-            data, exitstatus = run(cmd, DECPROMPTS, dbpass, stdout=True)
+            data, exitstatus = run(cmd, DECERRS, [dbpass], has_stdout=True,
+                                    has_stderr=True)
             if exitstatus == 0:
                 break
     else:
@@ -319,7 +353,8 @@ def save(db, dbpass):
     tmpDB = DB + '.temp'
     cmd = ENCCMD.format(tmpDB)
     try:
-        run(cmd, ENCPROMPTS, dbpass, stdin=data, exitonerror=True)
+        run(cmd, ENCERRS, [dbpass, data], has_stderr=True,
+            exitonerror=True)
         os.rename(tmpDB, DB)
     finally:
         try:
@@ -407,13 +442,9 @@ def cp(db, tags, rev, field, copy=True):
         printinfo(f'stdout is piped.  printing {field} to stdout...')
         sys.stdout.write(value)
         return
-    # dirty hack to make it work.  ticket open:
-    # https://github.com/pexpect/pexpect/issues/657
-    cpcmd = f"echo -n {shlex.quote(value)} | {CLIPCMD}"
-    delcmd = f"echo -n {shlex.quote(COPYDEL)} | {CLIPCMD}"
-    run('sh', stdin=cpcmd, exitonerror=True)
-    printinfo(f'{field} copied for {COPYLIFE} seconds', counter=COPYLIFE)
-    run('sh', stdin=delcmd, exitonerror=True)
+    run(CLIPCMD, CLIPERRS, [value], exitonerror=True)
+    printinfo(f'{field} copied for {COPYLIFE} seconds...', counter=COPYLIFE)
+    run(CLIPCMD, CLIPERRS, [COPYDEL], exitonerror=True)
 
 def add(db, tags, username, password, datab64s, note):
     """add a new entry from db"""
@@ -523,6 +554,7 @@ allargs = {
     '-n': {'metavar':'NOTE', 'type':str, 'help':'new note'},
 }
 parser = argparse.ArgumentParser()
+parser.add_argument('-v', action='store_true', help='show app info')
 subparsers = parser.add_subparsers(title='commands', dest='command')
 for cmd_name, cmd_args, cmd_named in allcmds :
     subp = subparsers.add_parser(cmd_name, **cmd_named)
@@ -541,18 +573,17 @@ for cmd_name, cmd_args, cmd_named in allcmds :
 args = parser.parse_args()
 
 # part where stuff start happening
-banner = """{BANNER}\
-nsapass™ — all your schlüssel are safely stored with us!™
-licensed under the GNU GPLv3.
-https://github.com/Al-Caveman/nsapass/
-
-for permanent settings edit the file "{}".
-{CLR}
-""".format(sys.argv[0], **THEME)
 try:
+    if args.v:
+        sys.stderr.write(
+         f"nsapass v{VERSION}  copyright (C) 2020  caveman\n"
+         "https://github.com/Al-Caveman/nsapass\n\n"
+         "this program comes with ABSOLUTELY NO WARRANTY; for details\n"
+         "read https://github.com/Al-Caveman/nsapass/blob/master/LICENSE\n"
+        )
+        sys.exit()
+
     if args.command is None:
-        sys.stderr.write(banner)
-        sys.stderr.flush()
         parser.print_help()
         sys.exit()
 
