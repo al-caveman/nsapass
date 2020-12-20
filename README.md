@@ -183,7 +183,7 @@ by myself<sup>*</sup>!
 
 - python.
 - any encryption/decryption app (by default
-  [`ciphart`](https://github.com/Al-Caveman/nsapass)).
+  [`ciphart`](https://github.com/Al-Caveman/ciphart)).
 - any clipboard management app (by default
   [`xclip`](https://github.com/astrand/xclip)).
 
