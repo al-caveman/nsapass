@@ -26,10 +26,11 @@ for these reasons:
   simple and awesome and _occam-razory_ this is!
 
 - **common sense:** your passwords database never touches the disk in plain
-  text form.  i know this is common sense, but i just listed it in case it
-  helps lowering your resting heart beat rate, so that hopefully your heart
-  attack is postponed.  in a sense nsapass also helps in prolonging your
-  lifespan.
+  text form (except with hibernating or swapping.  for these you may need
+  to mount them on encrypted device mappers for now).  i know this is
+  common sense, but i just listed it in case it helps lowering your resting
+  heart beat rate, so that hopefully your heart attack is postponed.  in a
+  sense nsapass also helps in prolonging your lifespan.
 
   also your _password_, which you use to decrypt the passwords database,
   never goes into nsapass.  you just talk to the external
