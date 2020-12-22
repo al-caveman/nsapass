@@ -15,7 +15,7 @@ for these reasons:
   `ciphart` is _super_ hard to bruteforce and other attacks!
 
 - **super _ultra_ easy to audit:**  written in a _single_ python script
-  made of _only_ about `<800` lines of code!  no separate config file, so
+  made of _only_ about `<800` lines of code!  no separate config files, so
   those approx `<800` lines of code include the configs!  the configs are
   done in a _sucklessy_ kind of approach where you edit some variables in
   the `nsa` file itself.
@@ -119,7 +119,12 @@ and over.  so, once you review the functionality of a single nsapass
 command, such as, say, `nsa cp`, you will not see much new functions
 for the other commands.
 
-# mini tutorial
+# mini tutorial (needs updating)
+**note:** _this tutorial still works for nsapass v4+, except for the fact
+that the command `nsa 2` no longer exists, and pasting is no longer used.
+instead consult `nsa -h` for commands `nsa tu`, `nsa tp` and `nsa stop`.
+also screenshots are outdated._
+
 let's create our first entry, and hence our 1st nsapass passwords database.
 this `nsa add caveman protonmail -u caveman@protonmail.com -m -n 'this is a
 note!'` will add a manual password entry (hence `-m`) for the tags `caveman
@@ -183,10 +188,12 @@ by myself<sup>*</sup>!
 # dependencies
 
 - python.
-- any encryption/decryption app (by default
+- any encryption/decryption app that can read passwords and plaintext input
+  as STDIN, and write ciphertext output as STDOUT.  default is
   [`ciphart`](https://github.com/Al-Caveman/ciphart)).
-- any clipboard management app (by default
-  [`xclip`](https://github.com/astrand/xclip)).
+- any keyboard typing app that takes value-to-type as STDIN, and then types
+  the value as if typed by keyboard.  default is
+  [`xdotool`](http://www.semicomplete.com/projects/xdotool)).
 
 # message from founder
 despite _all_ my engineering excellence and finesse, i'm still a maximally

@@ -33,6 +33,7 @@ import textwrap
 import tempfile
 import signal
 
+
 #######################################
 #                             __      #
 #           configs below   <(o )___  #
@@ -42,17 +43,11 @@ import signal
 # encoding
 ENCODING = 'utf-8'
 
-# location of pid dir
+# location of ipc dir
 PID = '/tmp/nsapass'
 
 # location of encrypted passwords db
 DB = os.path.expanduser('~/.local/share/nsapass/db.ciphart')
-
-# how many seconds should copied passwords remain in the clipboard?
-COPYLIFE = -1
-
-# what to copy in order to delete previous copy?
-COPYDEL = '~\o deleted by nsapass™ o/~'
 
 # password character sets
 SETS = {
@@ -79,20 +74,19 @@ DECERRS = {
 # command to save passwords db (must read password from stdin, then read
 # plain from stdin, then save output ciphertext to {})
 ENCCMD = 'ciphart -eszk -o {}'
-ENCERRS = {
-    0   : None, # success code
-    2   : 'ciphart reported libsodium failure',
-    3   : 'ciphart reported argument parsing failure',
-    4   : 'ciphart reported io failure',
-    5   : 'ciphart reported memory allocation failure',
-    6   : 'ciphart reported threading failure',
-    7   : 'ciphart reported bad password or corrupted input',
-   '*'  : 'ciphart reported a general failure' # default error
-}
+ENCERRS = DECERRS
 
-# command to paste into clipboard (must accept data from stdin)
-CLIPCMD = 'xclip -selection clipboard'
-CLIPERRS = {0 : None, '*' : 'general xclip error'}
+# command to type usernames/passwords (must accept data from stdin)
+TYPECMD = 'xdotool -'
+TYPEIN= 'type {}\n'
+TYPEERRS = {0 : None, '*' : 'general xdotool error'}
+
+# sleep delay before typing starts
+TYPEDELAY = 0.5
+
+# nsapass sub-command to type username and password, respectively
+CMD_TYPE_USERNAME = 'u'
+CMD_TYPE_PASSWORD = 'p'
 
 # theme
 THEME = {
@@ -113,7 +107,7 @@ THEME = {
 #             (devs only)               #
 #########################################
 
-VERSION = '3.0.0'
+VERSION = '4.0.0'
 KEY_TAGS = 'tags'
 KEY_USERNAME= 'username'
 KEY_PASS = 'password'
@@ -121,6 +115,8 @@ KEY_DATAB64 = 'datab64s'
 KEY_NOTE = 'note'
 KEY_TIME = 'timestamp'
 KEY_ARC = 'archived'
+SIG_USERNAME = signal.SIGUSR1
+SIG_PASSWORD = signal.SIGUSR2
 
 def frmtpass(password, showpass, limit=0):
     """formats passwords based on its visibility setting"""
@@ -135,19 +131,9 @@ def frmtpass(password, showpass, limit=0):
 def frmtask(msg):
     return '{PROMPT}< {}{CLR} '.format(msg, **THEME)
 
-def printinfo(msg, counter=0):
-    sys.stderr.write('{INFO}*{CLR} {}'.format(msg, **THEME))
+def printinfo(msg):
+    sys.stderr.write('{INFO}*{CLR} {}\n'.format(msg, **THEME))
     sys.stderr.flush()
-    try:
-        while counter:
-            if counter > 0:
-                sys.stderr.write('.')
-                sys.stderr.flush()
-            time.sleep(1)
-            counter -= 1
-        sys.stderr.write('\n')
-    except KeyboardInterrupt:
-        printwarn('expiring counter...')
 
 def printwarn(msg):
     sys.stderr.write('{WARN}*{CLR} {}\n'.format(msg, **THEME))
@@ -302,18 +288,18 @@ def run(cmd, cmderrs, stdins=[], has_stdout=False, has_stderr=False,
         f(f'unknown command return code "{p.returncode}"')
     return total_p_stdout, p.returncode
 
-def lock():
+def lock(path):
     """lock passwords database file"""
-    printinfo('locking db...')
-    lockDB = DB + '.lock'
-    dirname = os.path.dirname(lockDB)
+    printinfo(f'locking {path}...')
+    lockpath = path + '.lock'
+    dirname = os.path.dirname(lockpath)
     os.makedirs(dirname, exist_ok=True)
     try:
-        open(lockDB, 'xb').close()
+        open(lockpath, 'xb').close()
     except FileExistsError:
-        exit(f'lock file "{lockDB}" exists.  delete it if not used')
-    atexit.register(os.unlink, lockDB)
-    atexit.register(printinfo, 'unlocking db...')
+        exit(f'lock file "{lockpath}" exists.  delete it if not used')
+    atexit.register(os.unlink, lockpath)
+    atexit.register(printinfo, f'unlocking "{path}"...')
 
 def load(nonempty=False):
     """load passwords database"""
@@ -429,23 +415,6 @@ def printentry(db, tags, showpass=False, showold=False):
             sys.stderr.write('{}{KEY}{:9}:{CLR} {}\n'.format(
                 indent, key, value, **THEME))
 
-def cp(db, tags, rev, field, copy=True):
-    """copy a field from db into clipboard"""
-    value = db[tags][rev][field]
-    if value is None:
-        printwarn(f'{field} is empty')
-        return
-    if field == KEY_DATAB64:
-        sys.stdout.buffer.write(base64.b64decode(value))
-        return
-    if not copy:
-        printinfo(f'stdout is piped.  printing {field} to stdout...')
-        sys.stdout.write(value)
-        return
-    run(CLIPCMD, CLIPERRS, [value], exitonerror=True)
-    printinfo(f'{field} copied for {COPYLIFE} seconds...', counter=COPYLIFE)
-    run(CLIPCMD, CLIPERRS, [COPYDEL], exitonerror=True)
-
 def add(db, tags, username, password, datab64s, note):
     """add a new entry from db"""
     printinfo('adding entry...')
@@ -506,16 +475,48 @@ def forget(db, tags, retain):
     """forget the distant past of an entry from db"""
     db[tags] = db[tags][0:retain+1]
 
+global retrieved_username
+global retrieved_password
+retrieved_username = None
+retrieved_password = None
+def type_value(signum, frame):
+    """type retrieved field"""
+    value = None
+    if signum == SIG_USERNAME:
+        value = retrieved_username
+        field = 'username'
+    else:
+        value = retrieved_password
+        field = 'password'
+    printinfo(f'typing {field}...')
+    time.sleep(TYPEDELAY)
+    if value is not None:
+        # loop needed because xdotool doesn't print space peacefully, and
+        # doesn't seem to support space escaping, or escaping internal
+        # quotes (should i surround the whole value by quotes)
+        parts = value.split(' ')
+        for i in range(0, len(parts)):
+            if i:
+                run(TYPECMD, TYPEERRS, [TYPEIN.format('" "')],
+                    exitonerror=True)
+            if parts[i] == '':
+                typein = TYPEIN.format('" "')
+            else:
+                typein = TYPEIN.format(parts[i])
+            run(TYPECMD, TYPEERRS, [typein], exitonerror=True)
+    else:
+        printwarn(f'{field} is not retrieved')
+
 # parse arguments
 # commands are specified by their name, list of command arguments, and
 # extra named arguments for `add_parser`.
 # arguments are specified by their named arguments to `add_argument`.
 # 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
 allcmds = [
-    ['cp', ['tags', '-r', '-a', '-z'],
-        {'help':'copy username/password.  print password if piped'}],
+    ['get', ['tags', '-r', '-a', '-z'],
+        {'help':'get username/password entry'}],
     ['cat', ['tags', '-r', '-a', '-z'],
-        {'help':'print key file'}],
+        {'help':'write key file to stdout'}],
     ['add', ['tags', '-u', 'PASSWORD', '-n', '-z'],
         {'help':'add an entry'}],
     ['del', ['tags', '-a', '-z'],
@@ -532,13 +533,15 @@ allcmds = [
         {'help':'view entries'}],
     ['chpass', [],
         {'help':"change databases's password"}],
-    ['2', [],
-        {'help':"send signal 2 (SIGINT) to `nsa cp` processes.  this is "
-            "useful to use keyboard shortcuts to cause nsapass to "
-            "immediately move to copy passwords without needing to wait "
-            "for the timer to expire for the username, and without "
-            "needing to move to the nsapass terminal to manually press "
-            "ctrl^c"}]
+    ['stop', [],
+        {'help':"command running `nsa` process to stop.  handy "
+                "for mapping to keyboard shortcuts"}],
+    [CMD_TYPE_USERNAME, [],
+        {'help':"command running `nsa` process to type the "
+                "username.  handy for mapping to keyboard shortcuts"}],
+    [CMD_TYPE_PASSWORD, [],
+        {'help':"command running `nsa` process to type the "
+                "password.  handy for mapping to keyboard shortcuts"}],
 ]
 allargs = {
     'tags': {'metavar':'TAG', 'type':str, 'nargs':'*',
@@ -574,6 +577,16 @@ args = parser.parse_args()
 
 # part where stuff start happening
 try:
+    # register signal handlers
+    signal.signal(SIG_USERNAME, type_value)
+    signal.signal(SIG_PASSWORD, type_value)
+
+    # create a pid file for ipc via signals
+    os.makedirs(PID, exist_ok=True)
+    pidf = tempfile.NamedTemporaryFile(dir=PID)
+    pidf.write(str(os.getpid()).encode())
+    pidf.flush()
+
     if args.v:
         sys.stderr.write(
          f"nsapass v{VERSION}  copyright (C) 2020  caveman\n"
@@ -587,31 +600,36 @@ try:
         parser.print_help()
         sys.exit()
 
-    if args.command in {'cp', 'cat'}:
-        # create a pid file, to allow for `nsa 2` to send the process
-        # SIGINT so that the password gets copied immediately (by expiring
-        # username's copy)
-        os.makedirs(PID, exist_ok=True)
-        f = tempfile.NamedTemporaryFile(dir=PID)
-        f.write(str(os.getpid()).encode())
-        f.flush()
-
+    if args.command in {'get', 'cat'}:
         db, _ = load(nonempty=True)
         tags = picktags(db, args.tags)
         rev = pickrev(db, tags, args.r)
         printinfo('entry to load:')
         printentry(db, tags, showpass=args.z)
-        cp(db, tags, rev, KEY_USERNAME)
-        if args.command == 'cp':
-            cp(db, tags, rev, KEY_PASS, copy=sys.stdout.isatty())
-        elif args.command == 'cat':
-            cp(db, tags, rev, KEY_DATAB64, copy=False)
+        if args.command == 'cat':
+            if db[tags][rev][KEY_DATAB64] is not None:
+                sys.stdout.buffer.write(base64.b64decode(value))
+            else:
+                printwarn(f'field {KEY_DATAB64} is empty')
+        else:
+            cmdname = os.path.basename(sys.argv[0])
+            if db[tags][rev][KEY_USERNAME] is not None:
+                retrieved_username = db[tags][rev][KEY_USERNAME]
+                printinfo(
+                    f'type username by `{cmdname} {CMD_TYPE_USERNAME}`')
+            if db[tags][rev][KEY_PASS] is not None:
+                retrieved_password = db[tags][rev][KEY_PASS]
+                printinfo(
+                    f'type password by `{cmdname} {CMD_TYPE_PASSWORD}`')
+            printinfo('waiting for commands...')
+            while True:
+                signal.pause()
 
     elif args.command == 'add':
         tags = newtags(args.tags, required=True)
         password, datab64s = newpass(args.g, args.m, args.f, args.z,
             required=True)
-        lock()
+        lock(DB)
         db, dbpass = load()
         add(db, tags, args.u, password, datab64s, args.n)
         printinfo('added entry:')
@@ -619,7 +637,7 @@ try:
         save(db, dbpass)
 
     elif args.command == 'del':
-        lock()
+        lock(DB)
         db, dbpass = load(nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
@@ -632,7 +650,7 @@ try:
         save(db, dbpass)
 
     elif args.command == 'undel':
-        lock()
+        lock(DB)
         db, dbpass = load(nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == True]
         tags_list = search(args.tags, options=options)
@@ -649,7 +667,7 @@ try:
         password, datab64s = newpass(args.g, args.m, args.f, args.z)
         if {new_tags, args.u, password, datab64s, args.n} == {None}:
             exit('no changes requested')
-        lock()
+        lock(DB)
         db, dbpass = load(nonempty=True)
         cur_tags = picktags(db, args.tags, arc=args.a)
         printinfo('entry to modify:')
@@ -662,7 +680,7 @@ try:
         save(db, dbpass)
 
     elif args.command == 'undo':
-        lock()
+        lock(DB)
         db, dbpass = load(nonempty=True)
         tags = picktags(db, args.tags, arc=args.a)
         rev = pickrev(db, tags, args.r, required=True)
@@ -676,7 +694,7 @@ try:
         save(db, dbpass)
 
     elif args.command == 'forget':
-        lock()
+        lock(DB)
         db, dbpass = load(nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
@@ -707,24 +725,38 @@ try:
             printentry(db, tags, showpass=args.z, showold=args.o)
 
     elif args.command == 'chpass':
-        lock()
+        lock(DB)
         db, _ = load()
         save(db, None)
 
-    elif args.command == '2': # send SIGINT to pids
-        found = False
-        for d in os.listdir(PID):
-            found = True
-            with open(f'{PID}/{d}', 'rb') as f:
+    elif args.command in {'stop', CMD_TYPE_USERNAME, CMD_TYPE_PASSWORD}:
+        done = 0
+        for pid_file in os.listdir(PID):
+            pid_path = f'{PID}/{pid_file}'
+            with open(pid_path, 'r') as f:
                 pid = int(f.read())
-                printinfo(f'sending SIGINT to process {pid}...')
-                os.kill(pid, signal.SIGINT)
-        if not found:
-            exit('no PIDs for `nsa cp ...` found')
+                if pid == os.getpid():
+                    continue
+                if args.command == 'stop':
+                    signum = signal.SIGINT
+                elif args.command == CMD_TYPE_USERNAME:
+                    signum = SIG_USERNAME
+                elif args.command == CMD_TYPE_PASSWORD:
+                    signum = SIG_PASSWORD
+            try:
+                printinfo(f'sending signal {signum} to process {pid}...')
+                os.kill(pid, signum)
+            except ProcessLookupError:
+                printwarn(
+                    f'process {pid} not found.  deleting pid file...')
+                os.unlink(pid_path)
+            done += 1
+        if done == 0:
+            exit('no other nsapass process is running')
 
     else:
         exit(f'unknown command "{args.command}"')
 except KeyboardInterrupt:
-    printwarn('received keyboard interrupt.  exiting...')
+    printinfo('received interrupt.  exiting...')
 except EOFError:
-    printwarn('received end of file.  exiting...')
+    exit('premature end of file')
