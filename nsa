@@ -107,7 +107,7 @@ THEME = {
 #             (devs only)               #
 #########################################
 
-VERSION = '4.0.0'
+VERSION = '4.0.1'
 KEY_TAGS = 'tags'
 KEY_USERNAME= 'username'
 KEY_PASS = 'password'
@@ -115,6 +115,7 @@ KEY_DATAB64 = 'datab64s'
 KEY_NOTE = 'note'
 KEY_TIME = 'timestamp'
 KEY_ARC = 'archived'
+KEY_PID = 'pid'
 SIG_USERNAME = signal.SIGUSR1
 SIG_PASSWORD = signal.SIGUSR2
 
@@ -582,9 +583,13 @@ try:
     signal.signal(SIG_PASSWORD, type_value)
 
     # create a pid file for ipc via signals
+    pidd = {
+        KEY_PID : os.getpid(),
+        KEY_TIME: time.monotonic(),
+    }
     os.makedirs(PID, exist_ok=True)
-    pidf = tempfile.NamedTemporaryFile(dir=PID)
-    pidf.write(str(os.getpid()).encode())
+    pidf = tempfile.NamedTemporaryFile(mode='w', dir=PID)
+    json.dump(pidd, pidf)
     pidf.flush()
 
     if args.v:
@@ -730,27 +735,43 @@ try:
         save(db, None)
 
     elif args.command in {'stop', CMD_TYPE_USERNAME, CMD_TYPE_PASSWORD}:
-        done = 0
+        jobs = {'stop' : []}
+        signals = {
+            'stop' : signal.SIGINT,
+            CMD_TYPE_USERNAME : SIG_USERNAME,
+            CMD_TYPE_PASSWORD : SIG_PASSWORD
+        }
         for pid_file in os.listdir(PID):
             pid_path = f'{PID}/{pid_file}'
             with open(pid_path, 'r') as f:
-                pid = int(f.read())
-                if pid == os.getpid():
+                try:
+                    pidd = json.load(f)
+                except json.JSONDecodeError:
                     continue
-                if args.command == 'stop':
-                    signum = signal.SIGINT
-                elif args.command == CMD_TYPE_USERNAME:
-                    signum = SIG_USERNAME
-                elif args.command == CMD_TYPE_PASSWORD:
-                    signum = SIG_PASSWORD
-            try:
+            pid = pidd[KEY_PID]
+            ptime = pidd[KEY_TIME]
+            if pid == os.getpid():
+                continue
+            if args.command == 'stop':
+                jobs['stop'].append([pid])
+                continue
+            if args.command in jobs:
+                if ptime > jobs[args.command][0][1]:
+                    jobs[args.command] = [[pid, ptime]]
+                continue
+            jobs[args.command] = [[pid, ptime]]
+        done = 0
+        for cmd in jobs:
+            for job in jobs[cmd]:
+                pid = job[0]
+                signum = signals[cmd]
                 printinfo(f'sending signal {signum} to process {pid}...')
-                os.kill(pid, signum)
-            except ProcessLookupError:
-                printwarn(
-                    f'process {pid} not found.  deleting pid file...')
-                os.unlink(pid_path)
-            done += 1
+                try:
+                    os.kill(pid, signum)
+                except ProcessLookupError:
+                    printwarn(f'not found.  deleting pid file...')
+                    os.unlink(pid_path)
+                done += 1
         if done == 0:
             exit('no other nsapass process is running')
 
