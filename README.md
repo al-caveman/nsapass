@@ -51,9 +51,9 @@ plus, extra goodies:
 - **looks pretty:**  look at the beautiful colors!
 
 # alternatives to nsapass
-i didn't use much alternatives, but recently i've been using `keepassxc`.
-it sucks, because, look at their github page.  loads of C++, CMake, C,
-Shell, Objective-C++, etc. extreme complexity!
+i didn't use much alternatives, i used to use `keepassxc`.  it sucks,
+because, look at their github page.  loads of C++, CMake, C, Shell,
+Objective-C++, etc. extreme complexity!
 
 <p align="center">
     <img src="pics/comparision.png">
