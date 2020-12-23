@@ -190,10 +190,10 @@ by myself<sup>*</sup>!
 - python.
 - any encryption/decryption app that can read passwords and plaintext input
   as STDIN, and write ciphertext output as STDOUT.  default is
-  [`ciphart`](https://github.com/Al-Caveman/ciphart)).
+  [`ciphart`](https://github.com/Al-Caveman/ciphart).
 - any keyboard typing app that takes value-to-type as STDIN, and then types
   the value as if typed by keyboard.  default is
-  [`xdotool`](http://www.semicomplete.com/projects/xdotool)).
+  [`xdotool`](http://www.semicomplete.com/projects/xdotool).
 
 # message from founder
 despite _all_ my engineering excellence and finesse, i'm still a maximally
