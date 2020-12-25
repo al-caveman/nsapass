@@ -81,12 +81,12 @@ TYPECMD = 'xdotool -'
 TYPEIN= 'type {}\n'
 TYPEERRS = {0 : None, '*' : 'general xdotool error'}
 
-# sleep delay before typing starts
-TYPEDELAY = 0.5
-
 # nsapass sub-command to type username and password, respectively
 CMD_TYPE_USERNAME = 'u'
 CMD_TYPE_PASSWORD = 'p'
+
+# sleep delay before typing starts
+TYPEDELAY = 0.5
 
 # theme
 THEME = {
@@ -107,7 +107,7 @@ THEME = {
 #             (devs only)               #
 #########################################
 
-VERSION = '4.0.1'
+VERSION = '4.0.2'
 KEY_TAGS = 'tags'
 KEY_USERNAME= 'username'
 KEY_PASS = 'password'
@@ -500,11 +500,9 @@ def type_value(signum, frame):
             if i:
                 run(TYPECMD, TYPEERRS, [TYPEIN.format('" "')],
                     exitonerror=True)
-            if parts[i] == '':
-                typein = TYPEIN.format('" "')
-            else:
-                typein = TYPEIN.format(parts[i])
-            run(TYPECMD, TYPEERRS, [typein], exitonerror=True)
+            if len(parts[i]):
+                run(TYPECMD, TYPEERRS, [TYPEIN.format(parts[i])],
+                    exitonerror=True)
     else:
         printwarn(f'{field} is not retrieved')
 
