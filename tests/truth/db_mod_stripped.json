@@ -1,0 +1,104 @@
+{
+    "tag3": [
+        {
+            "tags": "tag3",
+            "username": "usernamelol",
+            "password": "lol",
+            "datab64s": null,
+            "note": null,
+            "archived": false
+        },
+        {
+            "tags": "tag3",
+            "username": null,
+            "password": "lol",
+            "datab64s": null,
+            "note": null,
+            "archived": false
+        },
+        {
+            "tags": "tag3",
+            "username": null,
+            "password": "lol",
+            "datab64s": null,
+            "note": null,
+            "archived": true
+        },
+        {
+            "tags": "tag3",
+            "username": null,
+            "password": "lol",
+            "datab64s": null,
+            "note": null,
+            "archived": false
+        }
+    ],
+    "tag4": [
+        {
+            "tags": "tag4",
+            "username": null,
+            "password": "lol",
+            "datab64s": "VWlITDa3O3DXNPVCTEQq6gXBw+9Xe/g53YyKH3od6L9+PxePsSgFkBzK6K+4G7g5th4po2UfIDb9pJtenXyap6pWOxTXUCv3fchnvF7iSnOCzyiodFf7Bnp19T/f0w75hmvvIw==",
+            "note": "file updated!",
+            "archived": false
+        },
+        {
+            "tags": "tag4",
+            "username": null,
+            "password": "lol",
+            "datab64s": "TW1YBVCjcRKP30qT+5k6jYCBa7/ZX9yXKR8kwo2tfRVTZxk+6PU8ZgXcByFL94yG2F0=",
+            "note": null,
+            "archived": false
+        },
+        {
+            "tags": "tag4",
+            "username": null,
+            "password": "lol",
+            "datab64s": "TW1YBVCjcRKP30qT+5k6jYCBa7/ZX9yXKR8kwo2tfRVTZxk+6PU8ZgXcByFL94yG2F0=",
+            "note": null,
+            "archived": true
+        },
+        {
+            "tags": "tag4",
+            "username": null,
+            "password": "lol",
+            "datab64s": "TW1YBVCjcRKP30qT+5k6jYCBa7/ZX9yXKR8kwo2tfRVTZxk+6PU8ZgXcByFL94yG2F0=",
+            "note": null,
+            "archived": false
+        }
+    ],
+    "tagNEW1": [
+        {
+            "tags": "tagNEW1",
+            "username": null,
+            "password": "rofl",
+            "datab64s": null,
+            "note": "new pass",
+            "archived": false
+        },
+        {
+            "tags": "tag1 tag2",
+            "username": null,
+            "password": "lol",
+            "datab64s": null,
+            "note": "test note",
+            "archived": false
+        },
+        {
+            "tags": "tag1 tag2",
+            "username": null,
+            "password": "lol",
+            "datab64s": null,
+            "note": "test note",
+            "archived": true
+        },
+        {
+            "tags": "tag1 tag2",
+            "username": null,
+            "password": "lol",
+            "datab64s": null,
+            "note": "test note",
+            "archived": false
+        }
+    ]
+}

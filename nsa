@@ -43,6 +43,9 @@ import signal
 # encoding
 ENCODING = 'utf-8'
 
+# default terminal width when auto-detection fails
+TERMWIDTH = 80
+
 # location of ipc dir
 PID = '/tmp/nsapass'
 
@@ -59,7 +62,8 @@ SETS = {
 
 # command to load passwords db (must read password from stdin, and print
 # plaintext to stdout)
-DECCMD = 'ciphart -dsk -i {}'
+DECCMD = 'ciphart -dsk -i {PATH}'
+DECIN= '{PASSWORD}'
 DECERRS = {
     0   : None, # success code
     2   : 'ciphart reported libsodium failure',
@@ -72,13 +76,14 @@ DECERRS = {
 }
 
 # command to save passwords db (must read password from stdin, then read
-# plain from stdin, then save output ciphertext to {})
-ENCCMD = 'ciphart -eszk -o {}'
+# plain from stdin, then save output ciphertext to {PATH})
+ENCCMD = 'ciphart -eszk -o {PATH}'
+ENCIN= '{PASSWORD}\n{DATA}'
 ENCERRS = DECERRS
 
 # command to type usernames/passwords (must accept data from stdin)
 TYPECMD = 'xdotool -'
-TYPEIN= 'type {}\n'
+TYPEIN= 'type {PASSWORD}\n'
 TYPEERRS = {0 : None, '*' : 'general xdotool error'}
 
 # nsapass sub-command to type username and password, respectively
@@ -107,7 +112,7 @@ THEME = {
 #             (devs only)               #
 #########################################
 
-VERSION = '4.0.2'
+VERSION = '4.1.0'
 KEY_TAGS = 'tags'
 KEY_USERNAME= 'username'
 KEY_PASS = 'password'
@@ -153,7 +158,10 @@ def cleanwords(words):
     return None if words == '' else words
 
 def wrap(text, subseq_indent):
-    termwidth = os.get_terminal_size()[0]
+    try:
+        termwidth = os.get_terminal_size()[0]
+    except OSError:
+        termwidth = TERMWIDTH
     width = termwidth - len(subseq_indent)
     wrapped_list = textwrap.wrap(text, width)
     return f'\n{subseq_indent}'.join(wrapped_list)
@@ -194,11 +202,19 @@ def ttyinput(prompt):
     sys.stdin = open('/dev/tty')
     return input(prompt)
 
-def askpass(name):
+def askpass(name, confirm=False, stdin=False):
     """prompts users for password"""
     while True:
-        pass1 = getpass.getpass(frmtask(f'new {name} password:'))
-        pass2 = getpass.getpass(frmtask(f'confirm {name} pass:'))
+        if stdin:
+            printinfo(f'reading {name} password from stdin...')
+            pass1 = input()
+            pass2 = pass1
+        else:
+            pass1 = getpass.getpass(frmtask(f'{name} password:'))
+            if confirm:
+                pass2 = getpass.getpass(frmtask(f'confirm {name} pass:'))
+            else:
+                pass2 = pass1
         if pass1 == pass2:
             return pass1
         printwarn('passwords mismatched.  retrying...')
@@ -243,13 +259,13 @@ def readdata(filein):
     datab64s = base64.b64encode(data).decode()
     return datab64s
 
-def newpass(gen, manual, filein, showpass, required=False):
+def newpass(gen, manual, stdin, filein, showpass, required=False):
     password = None
     datab64s = None
     if gen is not None:
         password = genpass(gen[0], gen[1], showpass)
-    if manual:
-        password = askpass('entry')
+    if manual or stdin:
+        password = askpass('new entry', confirm=True, stdin=stdin)
     if filein is not None:
         datab64s = readdata(filein)
     if required and password is None and datab64s is None:
@@ -267,7 +283,7 @@ def newtags(tags, required=False):
         else:
             return tags
 
-def run(cmd, cmderrs, stdins=[], has_stdout=False, has_stderr=False,
+def run(cmd, cmderrs, cmdin, has_stdout=False, has_stderr=False,
     exitonerror=False
 ):
     """runs and interacts with external commands"""
@@ -275,11 +291,7 @@ def run(cmd, cmderrs, stdins=[], has_stdout=False, has_stderr=False,
     stderr = subprocess.PIPE if has_stderr else None
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=stdout,
         stderr=stderr, shell=True, encoding=ENCODING)
-    total_p_stdout = ''
-    for stdin in stdins:
-        p_stdout, _ = p.communicate(input=stdin)
-        if stdout:
-            total_p_stdout += p_stdout
+    p_stdout, _ = p.communicate(input=cmdin)
     f = exit if exitonerror else printwarn
     r = p.returncode if p.returncode in cmderrs else '*'
     try:
@@ -287,14 +299,15 @@ def run(cmd, cmderrs, stdins=[], has_stdout=False, has_stderr=False,
             f(cmderrs[r])
     except KeyError:
         f(f'unknown command return code "{p.returncode}"')
-    return total_p_stdout, p.returncode
+    return p_stdout, p.returncode
 
 def lock(path):
     """lock passwords database file"""
     printinfo(f'locking {path}...')
     lockpath = path + '.lock'
     dirname = os.path.dirname(lockpath)
-    os.makedirs(dirname, exist_ok=True)
+    if len(dirname):
+        os.makedirs(dirname, exist_ok=True)
     try:
         open(lockpath, 'xb').close()
     except FileExistsError:
@@ -302,34 +315,35 @@ def lock(path):
     atexit.register(os.unlink, lockpath)
     atexit.register(printinfo, f'unlocking "{path}"...')
 
-def load(nonempty=False):
+def load(path, stdin, nonempty=False):
     """load passwords database"""
     printinfo('loading db...')
-    if os.path.exists(DB):
-        cmd = DECCMD.format(DB)
+    if os.path.exists(path):
+        cmd = DECCMD.format(**{'PATH' : path})
         while True:
-            dbpass = getpass.getpass(frmtask('database password:'))
-            data, exitstatus = run(cmd, DECERRS, [dbpass], has_stdout=True,
+            dbpass = askpass('database', stdin=stdin)
+            decin = DECIN.format(**{'PASSWORD' : dbpass})
+            data, exitstatus = run(cmd, DECERRS, decin, has_stdout=True,
                                     has_stderr=True)
             if exitstatus == 0:
                 break
     else:
-        printwarn(f'"{DB}" not found')
+        printwarn(f'"{path}" not found')
         dbpass = None
         data = '{}'
     try:
         db = json.loads(data)
     except json.JSONDecodeError:
-        exit(f'error decoding database "{DB}"')
+        exit(f'error decoding database "{path}"')
     if len(db) == 0 and nonempty:
         exit('database is empty')
     return db, dbpass
 
-def save(db, dbpass):
+def save(db, dbpass, stdin, path):
     """save passwords database"""
     if dbpass is None:
-        dbpass = askpass('database')
-    while True:
+        dbpass = askpass('new database', confirm=True, stdin=stdin)
+    while not stdin:
         ans = ttyinput(frmtask('save? [y/n]'))
         if ans == 'y':
             break
@@ -337,15 +351,16 @@ def save(db, dbpass):
             return
     printinfo('saving db...')
     data = json.dumps(db, indent=4)
-    tmpDB = DB + '.temp'
-    cmd = ENCCMD.format(tmpDB)
+    encin = ENCIN.format(**{'PASSWORD' : dbpass, 'DATA' : data})
+    path_tmp = path + '.temp'
+    cmd = ENCCMD.format(**{'PATH' : path_tmp})
     try:
-        run(cmd, ENCERRS, [dbpass, data], has_stderr=True,
+        run(cmd, ENCERRS, encin, has_stderr=True,
             exitonerror=True)
-        os.rename(tmpDB, DB)
+        os.rename(path_tmp, path)
     finally:
         try:
-            os.unlink(tmpDB)
+            os.unlink(path_tmp)
         except FileNotFoundError:
             pass
 
@@ -452,6 +467,7 @@ def timetravel(db, tags, rev):
     tmp = db[tags].pop(rev)
     db[tags].insert(0, tmp)
     db[tmp[KEY_TAGS]] = db.pop(tags)
+    return tmp[KEY_TAGS]
 
 def modify(db, cur_tags, new_tags, username, password, datab64s, note):
     """modify an entry from db"""
@@ -498,11 +514,11 @@ def type_value(signum, frame):
         parts = value.split(' ')
         for i in range(0, len(parts)):
             if i:
-                run(TYPECMD, TYPEERRS, [TYPEIN.format('" "')],
-                    exitonerror=True)
+                typein = TYPEIN.format(**{'PASSWORD' : '" "'})
+                run(TYPECMD, TYPEERRS, typein, exitonerror=True)
             if len(parts[i]):
-                run(TYPECMD, TYPEERRS, [TYPEIN.format(parts[i])],
-                    exitonerror=True)
+                typein = TYPEIN.format(**{'PASSWORD' : parts[i]})
+                run(TYPECMD, TYPEERRS, typein, exitonerror=True)
     else:
         printwarn(f'{field} is not retrieved')
 
@@ -557,6 +573,10 @@ allargs = {
 }
 parser = argparse.ArgumentParser()
 parser.add_argument('-v', action='store_true', help='show app info')
+parser.add_argument('-s', action='store_true',
+                    help='obtain all passwords from STDIN')
+parser.add_argument('-d', metavar='DB', type=str,
+                    help=f'path to database.  default is "{DB}"')
 subparsers = parser.add_subparsers(title='commands', dest='command')
 for cmd_name, cmd_args, cmd_named in allcmds :
     subp = subparsers.add_parser(cmd_name, **cmd_named)
@@ -567,7 +587,7 @@ for cmd_name, cmd_args, cmd_named in allcmds :
                 nargs=2, type=str,
                 help='generate a new LEN-long password from SET')
             muex.add_argument('-m', action='store_true',
-                help='manually define password')
+                help='manually define password from getpass')
             subp.add_argument('-f', metavar='FILE', type=str,
                 help='key via file FILE, or STDIN if FILE is "-"')
         else:
@@ -591,7 +611,7 @@ try:
     pidf.flush()
 
     if args.v:
-        sys.stderr.write(
+        sys.stdout.write(
          f"nsapass v{VERSION}  copyright (C) 2020  caveman\n"
          "https://github.com/Al-Caveman/nsapass\n\n"
          "this program comes with ABSOLUTELY NO WARRANTY; for details\n"
@@ -604,13 +624,15 @@ try:
         sys.exit()
 
     if args.command in {'get', 'cat'}:
-        db, _ = load(nonempty=True)
+        path = args.d if args.d else DB
+        db, _ = load(path, args.s, nonempty=True)
         tags = picktags(db, args.tags)
         rev = pickrev(db, tags, args.r)
         printinfo('entry to load:')
         printentry(db, tags, showpass=args.z)
         if args.command == 'cat':
             if db[tags][rev][KEY_DATAB64] is not None:
+                value = db[tags][rev][KEY_DATAB64]
                 sys.stdout.buffer.write(base64.b64decode(value))
             else:
                 printwarn(f'field {KEY_DATAB64} is empty')
@@ -630,18 +652,20 @@ try:
 
     elif args.command == 'add':
         tags = newtags(args.tags, required=True)
-        password, datab64s = newpass(args.g, args.m, args.f, args.z,
-            required=True)
-        lock(DB)
-        db, dbpass = load()
+        password, datab64s = newpass(args.g, args.m, args.s, args.f,
+            args.z, required=True)
+        path = args.d if args.d else DB
+        lock(path)
+        db, dbpass = load(path, args.s)
         add(db, tags, args.u, password, datab64s, args.n)
         printinfo('added entry:')
         printentry(db, tags, showpass=args.z)
-        save(db, dbpass)
+        save(db, dbpass, args.s, path)
 
     elif args.command == 'del':
-        lock(DB)
-        db, dbpass = load(nonempty=True)
+        path = args.d if args.d else DB
+        lock(path)
+        db, dbpass = load(path, args.s, nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
         if len(tags_list) == 0:
@@ -650,11 +674,12 @@ try:
         for tags in tags_list:
             printentry(db, tags, showpass=args.z)
             delete(db, tags)
-        save(db, dbpass)
+        save(db, dbpass, args.s, path)
 
     elif args.command == 'undel':
-        lock(DB)
-        db, dbpass = load(nonempty=True)
+        path = args.d if args.d else DB
+        lock(path)
+        db, dbpass = load(path, args.s, nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == True]
         tags_list = search(args.tags, options=options)
         if len(tags_list) == 0:
@@ -663,15 +688,17 @@ try:
         for tags in tags_list:
             printentry(db, tags, showpass=args.z)
             undelete(db, tags)
-        save(db, dbpass)
+        save(db, dbpass, args.s, path)
 
     elif args.command == 'mod':
         new_tags = newtags(args.t)
-        password, datab64s = newpass(args.g, args.m, args.f, args.z)
+        password, datab64s = newpass(args.g, args.m, args.s, args.f,
+            args.z)
         if {new_tags, args.u, password, datab64s, args.n} == {None}:
             exit('no changes requested')
-        lock(DB)
-        db, dbpass = load(nonempty=True)
+        path = args.d if args.d else DB
+        lock(path)
+        db, dbpass = load(path, args.s, nonempty=True)
         cur_tags = picktags(db, args.tags, arc=args.a)
         printinfo('entry to modify:')
         printentry(db, cur_tags, showpass=args.z)
@@ -680,25 +707,27 @@ try:
         if new_tags is None:
             new_tags = cur_tags
         printentry(db, new_tags, showpass=args.z)
-        save(db, dbpass)
+        save(db, dbpass, args.s, path)
 
     elif args.command == 'undo':
-        lock(DB)
-        db, dbpass = load(nonempty=True)
+        path = args.d if args.d else DB
+        lock(path)
+        db, dbpass = load(path, args.s, nonempty=True)
         tags = picktags(db, args.tags, arc=args.a)
         rev = pickrev(db, tags, args.r, required=True)
         if rev == 0:
             exit(f'revision {rev} is already latest')
         printinfo('before undo:')
         printentry(db, tags, showpass=args.z, showold=True)
-        timetravel(db, tags, rev)
+        new_tags = timetravel(db, tags, rev)
         printinfo('after undo:')
-        printentry(db, tags, showpass=args.z, showold=True)
-        save(db, dbpass)
+        printentry(db, new_tags, showpass=args.z, showold=True)
+        save(db, dbpass, args.s, path)
 
     elif args.command == 'forget':
-        lock(DB)
-        db, dbpass = load(nonempty=True)
+        path = args.d if args.d else DB
+        lock(path)
+        db, dbpass = load(path, args.s, nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
         if args.r is None:
@@ -717,10 +746,11 @@ try:
                 forgotten = True
         if not forgotten:
             exit('nothing to forget')
-        save(db, dbpass)
+        save(db, dbpass, args.s, path)
 
     elif args.command == 'ls':
-        db, _ = load(nonempty=True)
+        path = args.d if args.d else DB
+        db, _ = load(path, args.s, nonempty=True)
         options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
         tags_list = search(args.tags, options=options)
         printinfo('listing...')
@@ -728,9 +758,10 @@ try:
             printentry(db, tags, showpass=args.z, showold=args.o)
 
     elif args.command == 'chpass':
-        lock(DB)
-        db, _ = load()
-        save(db, None)
+        path = args.d if args.d else DB
+        lock(path)
+        db, _ = load(path, args.s)
+        save(db, None, args.s, path)
 
     elif args.command in {'stop', CMD_TYPE_USERNAME, CMD_TYPE_PASSWORD}:
         jobs = {'stop' : []}

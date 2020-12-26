@@ -1,0 +1,28 @@
+usage: nsa [-h] [-v] [-s] [-d DB]
+           {get,cat,add,del,undel,mod,undo,forget,ls,chpass,stop,u,p} ...
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v                    show app info
+  -s                    obtain all passwords from STDIN
+  -d DB                 path to database. default is
+                        "/home/maxtor/.local/share/nsapass/db.ciphart"
+
+commands:
+  {get,cat,add,del,undel,mod,undo,forget,ls,chpass,stop,u,p}
+    get                 get username/password entry
+    cat                 write key file to stdout
+    add                 add an entry
+    del                 delete an entry
+    undel               undelete an entry
+    mod                 modify an entry
+    undo                travel through time
+    forget              forget the past of an entry
+    ls                  view entries
+    chpass              change databases's password
+    stop                command running `nsa` process to stop. handy for
+                        mapping to keyboard shortcuts
+    u                   command running `nsa` process to type the username.
+                        handy for mapping to keyboard shortcuts
+    p                   command running `nsa` process to type the password.
+                        handy for mapping to keyboard shortcuts
