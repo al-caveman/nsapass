@@ -91,7 +91,7 @@ CMD_TYPE_USERNAME = 'u'
 CMD_TYPE_PASSWORD = 'p'
 
 # sleep delay before typing starts
-TYPEDELAY = 0.5
+TYPEDELAY = 0.1
 
 # theme
 THEME = {
