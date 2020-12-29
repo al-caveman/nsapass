@@ -60,6 +60,9 @@ SETS = {
         string.whitespace),
 }
 
+# maximum number seconds nsapass will idle before self-killing
+IDLE_TIMEOUT = 300
+
 # command to load passwords db (must read password from stdin, and print
 # plaintext to stdout)
 DECCMD = 'ciphart -dsk -i {PATH}'
@@ -112,7 +115,7 @@ THEME = {
 #             (devs only)               #
 #########################################
 
-VERSION = '4.1.0'
+VERSION = '4.2.0'
 KEY_TAGS = 'tags'
 KEY_USERNAME= 'username'
 KEY_PASS = 'password'
@@ -337,6 +340,7 @@ def load(path, stdin, nonempty=False):
         exit(f'error decoding database "{path}"')
     if len(db) == 0 and nonempty:
         exit('database is empty')
+    signal.alarm(IDLE_TIMEOUT)
     return db, dbpass
 
 def save(db, dbpass, stdin, path):
@@ -496,6 +500,7 @@ retrieved_username = None
 retrieved_password = None
 def type_value(signum, frame):
     """type retrieved field"""
+    signal.alarm(IDLE_TIMEOUT)
     value = None
     if signum == SIG_USERNAME:
         value = retrieved_username
@@ -519,6 +524,10 @@ def type_value(signum, frame):
                 run(TYPECMD, TYPEERRS, typein, exitonerror=True)
     else:
         printwarn(f'{field} is not retrieved')
+
+def timed_out(signum, frame):
+    printinfo("session timed out.  exiting...")
+    sys.exit(0)
 
 # parse arguments
 # commands are specified by their name, list of command arguments, and
@@ -597,6 +606,7 @@ try:
     # register signal handlers
     signal.signal(SIG_USERNAME, type_value)
     signal.signal(SIG_PASSWORD, type_value)
+    signal.signal(signal.SIGALRM, timed_out)
 
     # create a pid file for ipc via signals
     pidd = {
