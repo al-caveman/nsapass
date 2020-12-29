@@ -492,8 +492,6 @@ def forget(db, tags, retain):
     """forget the distant past of an entry from db"""
     db[tags] = db[tags][0:retain+1]
 
-global retrieved_username
-global retrieved_password
 retrieved_username = None
 retrieved_password = None
 def type_value(signum, frame):
