@@ -15,8 +15,8 @@ for these reasons:
   `ciphart` is _super_ hard to bruteforce and other attacks!
 
 - **super _ultra_ easy to audit:**  written in a _single_ python script
-  made of _only_ about `<800` lines of code!  no separate config files, so
-  those approx `<800` lines of code include the configs!  the configs are
+  made of _only_ about `800` lines of code!  no separate config files, so
+  those approx `800` lines of code include the configs!  the configs are
   done in a _sucklessy_ kind of approach where you edit some variables in
   the `nsa` file itself.
 
@@ -63,7 +63,7 @@ how can _you_ know that funny memory bugs don't exist in `keepassxc`!?
 would _you_ put _faith_ in keepassxc's devs that their app is free of
 segfaults?  _no way!_ no thanks sir! _keep_ your keepass to yourself.
 i'm going to rather rely on the _many_ highly skilled monkeys at _python_
-by coding an alternative in `<800` lines of python code (inc. configs).
+by coding an alternative in `800` lines of python code (inc. configs).
 
 to be more exact, i used to use the command `keepassxc-cli` to load
 passwords into my clipboard, then paste them manually in password fields as
@@ -76,7 +76,7 @@ the html5?  layers of horror upon horror.  so yeah, browser integration?
 nothx!
 
 so, yeah, i just used `keepassxc-cli`, and then kept suffering until i
-decided to finally write `<800` lines of python (i.e. nsapass) to end this
+decided to finally write `800` lines of python (i.e. nsapass) to end this
 misery and it ended.  and now it's _your_ time, do _you_ want to end your
 misery too?  it's easy!  just `git clone` this enjoy the taste of liberty!
 
