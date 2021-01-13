@@ -69,13 +69,14 @@ DECCMD = 'ciphart -dsk -i {PATH}'
 DECIN= '{PASSWORD}'
 DECERRS = {
     0   : None, # success code
+    1   : 'ciphart reported a general failure',
     2   : 'ciphart reported libsodium failure',
     3   : 'ciphart reported argument parsing failure',
     4   : 'ciphart reported io failure',
     5   : 'ciphart reported memory allocation failure',
     6   : 'ciphart reported threading failure',
     7   : 'ciphart reported bad password or corrupted input',
-   '*'  : 'ciphart reported a general failure' # default error
+   '*'  : 'ciphart reported an unknown failure' # default error
 }
 
 # command to save passwords db (must read password from stdin, then read
