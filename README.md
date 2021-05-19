@@ -1,208 +1,361 @@
-# what is nsapass?
-nsapass  is the simplest, most secure, passwords manager that i know of,
-for these reasons:
-
-- **minimum segfaults and funny bugs:**  written _entirely_ in python.  you
-  can be pretty sure that undefined behaviour due to improper memory access
-  is _pretty_ minimum.  in a sense nsapass takes advantage of the _many_
-  highly skilled python monkeys to ensure that this app does not have funny
-  memory bugs.
-
-  sensitive parts concerning encryption, decryption or access to clipboard,
-  is entirely offloaded into other external apps of your choice in the
-  _true_ spirit of the UNIX philosophy!  by default, the configuration
-  makes a _great_ choice by using `ciphart` for encryption and decryption.
-  `ciphart` is _super_ hard to bruteforce and other attacks!
-
-- **super _ultra_ easy to audit:**  written in a _single_ python script
-  made of _only_ about `800` lines of code!  no separate config files, so
-  those approx `800` lines of code include the configs!  the configs are
-  done in a _sucklessy_ kind of approach where you edit some variables in
-  the `nsa` file itself.
-
-  the passwords database itself is a simple json text file!  of course,
-  this entire json file is encrypted, but thanks to the _extreme_
-  simplicity of this, you may decrypt it manually to see by _yourself_ how
-  simple and awesome and _occam-razory_ this is!
-
-- **common sense:** your passwords database never touches the disk in plain
-  text form (except with hibernating or swapping.  for these you may need
-  to mount them on encrypted device mappers for now).  i know this is
-  common sense, but i just listed it in case it helps lowering your resting
-  heart beat rate, so that hopefully your heart attack is postponed.  in a
-  sense nsapass also helps in prolonging your lifespan.
-
-  also your _password_, which you use to decrypt the passwords database,
-  never goes into nsapass.  you just talk to the external
-  encryption/decryption app of your choice which you use (by default
-  `ciphart`).
-
-plus, extra goodies:
-
-- **super fast usage!**  thanks to the _advanced tag-based hierarchical
-  search_, you can retrieve entries _ridiculously_ fast.  so fast a sloth
-  using nsapass would appear faster than a fox using keepass!  e.g. say
-  you'd like to retrieve an entry with the tags `caveman protonmail` and it
-  is the only entry in the database starting with `c`, then you can just
-  refer to it by `c`!  let's face it, the bottleneck with password
-  managers, in reality, is the user interface.  this is why nsapass is
-  super fast, because it solves the real problem.
-- **flexible:**  yup.  just look at the configs part of `nsa` file.
-- **looks pretty:**  look at the beautiful colors!
-
-# alternatives to nsapass
-i didn't use much alternatives, i used to use `keepassxc`.  it sucks,
-because, look at their github page.  loads of C++, CMake, C, Shell,
-Objective-C++, etc. extreme complexity!
-
 <p align="center">
     <img src="pics/comparision.png">
 </p>
 
-how can _you_ know that funny memory bugs don't exist in `keepassxc`!?
-would _you_ put _faith_ in keepassxc's devs that their app is free of
-segfaults?  _no way!_ no thanks sir! _keep_ your keepass to yourself.
-i'm going to rather rely on the _many_ highly skilled monkeys at _python_
-by coding an alternative in `800` lines of python code (inc. configs).
+# What is _nsapass_?
+Generally, it is the simplest, most usable, most secure, passwords manager.
+Because all other password managers are either too complex to be
+audit-able, lack critical features, or both.
 
-to be more exact, i used to use the command `keepassxc-cli` to load
-passwords into my clipboard, then paste them manually in password fields as
-i want.  i just never liked having fancy browser-integration where
-username-password fields get populated automatically by mere press of some
-shortcut key.  imo totally not worth the extra complexity.  our passwords
-are very _dear_ to us, and the web is like a big toilet full of disease.
-just imagine how horrible browsers are?  imagine the javascript?  imagine
-the html5?  layers of horror upon horror.  so yeah, browser integration?
-nothx!
+## Quick comparison
 
-so, yeah, i just used `keepassxc-cli`, and then kept suffering until i
-decided to finally write `800` lines of python (i.e. nsapass) to end this
-misery and it ended.  and now it's _your_ time, do _you_ want to end your
-misery too?  it's easy!  just `git clone` this enjoy the taste of liberty!
+- [_keepassxc_](https://github.com/keepassxreboot/keepassxc) has loads of
+  lines of codes that makes it effectively not audit-able, and it's CLI is
+  terrible.  So it loses on both of the auditability and usability
+  dimensions.
+- [_pass_](https://www.passwordstore.org/) has roughly about the same lines
+  of codes as _nsapass_, so it is sort of auditable, but it:
+  - Exposes each password entry as a file with a meaningful name (so that
+    the user remembers it).  The file names are obviously in plain text in
+    the file system.  If file names are relevant to passwords inside them,
+    then it leaks information should the disk be stolen.  If the file names
+    are not relevant, then it becomes not usable as you'll need to remember
+    odd names unrelated to passwords within them.
 
-# how to use?
+    _nsapass_ doesn't leak any information about the
+    entries, as the whole database is stored in a single encrypted file.
+    You will be free to choose the most memorable method to tag your entry,
+    without conerns of leaking it in plain text in the file system.
 
-## installation
-just execute `nsa`.  to make it convenient, perhaps copy it somewhere in
-`PATH`.  that's all.
+  - Is limited to `gpg` for file encryption and decryption, a bloated tool.
 
-no fancy shmancy enterprise-grade frameworky end-to-endy corporaty
-nonsense.  just straight _"want it?  use it!"_.
+    _nsapass_ allows you to use any other file encryption and decryption
+    tool.
 
-## config
-permanent configs are stored in `nsa` file itself; just edit it.  for
-run-time configs run `nsa -h` and follow along.  you can get further help
-from the subcommands by, say, `nsa cp -h`.
+  - Lots of limitations:
+    - E.g. _pass_'s password generation isn't able to generate desired
+      passwords based on target entropy bits (at least not out of the box).
 
-## general guidelines
+      _nsapass_ does this neatly with the `-b BITS` argument.
 
-1. you're highly encouraged to take advantage of the easy audit-ability of
-   nsapass by reading it yourself.  
-2. then, after reading it, you create your own fork of the thing that
-   you've reviewed and hopefully use it forever.
-3. if at any point you wish to update your version to take advantage of new
-   changes in upstream, you should go back to step (1) again.  but, again,
-   since nsapass is small, written in an easy language (python), such
-   audit is simple.
+    - E.g. _pass_ uses the directory stricture offered by the file system
+      ro organise entries.  This requires too much typing to identify.
 
-this auditing is really worth it.  would you blindly trust the developers
-of your passwords manager?  fortunately you don't have to with nsapass,
-so don't blindly trust when you can verify.
+      _nsapass_ uses a smart tagging system that can
+      effectively achieve a heirarichal partitioning of entries, without
+      needing to type their names fully.  E.g. you may even skip tags in
+      the middle; something you cannot do with _pass_'s directory
+      structure.
 
-to speed up your auditing, you may start reading nsapass from near the
-end where it says `# part where stuff start happening`.  from there, you
-will see the functions that it uses, and which values are passed to them,
-and move forward.
+    - ...
 
-all the nsapass commands keep reusing of the same basic functions over
-and over.  so, once you review the functionality of a single nsapass
-command, such as, say, `nsa cp`, you will not see much new functions
-for the other commands.
+  So, when considering the limited features of _pass_ compared to those of
+  _nsapass_, _pass_ rather feels very bloated; _nsapass_ does much more
+  with about the same size of about `800` lines of code.
 
-# mini tutorial (needs updating)
-**note:** _this tutorial still works for nsapass v4+, except for the fact
-that the command `nsa 2` no longer exists, and pasting is no longer used.
-instead consult `nsa -h` for commands `nsa tu`, `nsa tp` and `nsa stop`.
-also screenshots are outdated._
+## A closer look
 
-let's create our first entry, and hence our 1st nsapass passwords database.
-this `nsa add caveman protonmail -u caveman@protonmail.com -m -n 'this is a
-note!'` will add a manual password entry (hence `-m`) for the tags `caveman
-protonmail`.  the other entries (e.g. username `caveman@protonmail.com` and
-note `this is a note!` are optional, but can make things handy).  we then
-get this _neat_ prompt:
-<p align="center"><img src="pics/mini_tutorial_1.png"></p>
+- **No funny memory bugs:** Thanks implementing _nsapass_
+  entirely in Python, we easily win this by simply taking advantage of the
+  decades already spent by Python's many highly-skilled monkeys in fighting
+  all sorts of funny memory bugs and security issues.
 
-now, let's add another password entry with search tags `caveman gmail`, and
-a much bigger note to show you how neatly nsapass wraps long notes based on
-terminal width.  plus, we will use a super-secure automatically generated
-password (by using `-g 30 printable`).  we will also choose to display this
-password by specifying the `-z` flag (which causes `nsa` to display the
-password):
-<p align="center"><img src="pics/mini_tutorial_2.png"></p>
+- **Easy to audit:** _nsapass_ is just a single file, in about `800`
+  lines of code, including its configurations.  This makes it actually
+  auditable in a practical manner.
 
-super mega _ultra_ neat, isn't it?  if this isn't neat for you, then i
-don't know what is.  do you see how _beautiful_ the colors are?  does not
-it mesmerize the heart and the mind?
+  Auditability of a password manager is extremely critical and must be a
+  fundamental requirement.  Compare this to the countless
+  practically-unauditable C/C++ lines in the likes of
+  [_keepassxc_](https://github.com/keepassxreboot/keepassxc) (yikes!).
+  Would you entrust your passwords to them?  I would not, henceforth
+  _nsapass_.
 
-anyway, let's now ask nsa pass to list for us all passwords that their
-search tags start with letter `c`.  we do this by `nsa ls c`.  can't get
-easier.  and then we get this _beautiful_ output:
-<p align="center"><img src="pics/mini_tutorial_3.png"></p>
+- **Very powerful:** _nsapass_ is simple, but not stupidly.  It allows you
+  to define your own external commands for encrypting, decrypting or doing
+  whatever you want with your retrieved passwords/keyfiles/URIs entries, by
+  simply editing configuration variables `ENCRYPT_COMMAND`,
+  `DECRYPT_COMMAND`, `DO_COMMANDS` which are inside `nsa` script itself.
 
-last but certainly not least, let's copy an entry into our clipboard for
-use, and at the same time, show you how _convenient_ the tags-based search
-feature is.  let's load the entry associated with `caveman gmail`, shall
-we?  well, we only need to type minimally to uniquely identify it.  so, we
-just need to call it `c g`!  i.e. the entry with its 1st tag starting by
-`c` and its 2nd starting by `g`.  the command is only `nsa cp c g`!  even a
-sloth can feel like a fox.  here is the _gorgeous_ output:
-<p align="center"><img src="pics/mini_tutorial_4.png"></p>
+  This allows for neat automations.  The argument `-c` allows to define a
+  sequence of actions.  E.g. with default `DO_COMMANDS`, `nsa do caveman -c
+  pod` will 1st load the password into clipboard (`p`), paste it by
+  emulating `Ctrl+V` (`o`), and then deleting the password in the clipboard
+  (`d`).  
 
-btw, did you know that you may execute `nsa 2` in a separate
-process, in order to send `SIGINT` signal to all `nsa cp` or `nsa cat`
-processes?  this is _very_ powerful and handy, because it allows you to
-configure shortcuts in your window management system to execute `nsa 2` in
-order to talk to other `nsa (cp|cat)` processes so that it moves on
-immediately to to copy the password, or to immediately delete the previous
-copies from the clipboard, all without needing to manually re-visit the
-terminal where `nsa (cp|cat)` is running to manually type `ctrl^c`.  very
-neat!  for example, in `i3`'s configs, i have added this key binding
+  You can define your own automations, with your own magical external
+  commands.  E.g. you may even skip the clipboard and do it entirely using
+  keyboard emulation?  Your imagination is the limit!
+
+- **Less password typing:** First you load your passwords database into an
+  _nsapass_ backend by`nsa start`, and then enjoy using it without password
+  prompts by commands such a `nsa ls ...`, `nsa add ...`, etc.  `nsa -h`
+  for details.
+
+  This not only enhances the convenience, but is necessary to practically
+  increase our security, as password databases must be encrypted by
+  high-entropy passwords that are _rarely_ typed.  Minimising moments when
+  we type such high-entropy password reduces password theft windows (e.g.
+  look-behind-shoulder).
+
+- **Smart tags-based search for minimal typing:**  All password entries are
+  stored with tags.  You don't have to fully type a tag's name.  _nsapass_
+  has a smart tags lookup system.
+
+  E.g. if you'd like to pick the entry associated with the tags `caveman
+  protonmail`, you may identify it the boring way by `nsa do caveman protonmail`, or by
+  just typing `nsa do c p` if it's the only entry with tags that begin with
+  `c` and `p`.  _nsapass_ will intelligently figure out that `c p` must
+  have been referring to `caveman protonmail`, based on how unique the
+  match is against tags of other entries in the database..
+
+- **Common sense:** Your passwords database never touches the disk in plain
+  text form.  If you have disk swap memory, or cybernation, make sure
+  they're encrypted (or disable them; who needs them these days?).
+
+- **Looks pretty:**
+
+<p align="center"><img src="pics/screenshot_init.png"></p>
+<p align="center"><strong>Fig 1.</strong> Initial setup.</p>
+    
+<p align="center"><img src="pics/screenshot_someuse.png"></p>
+<p align="center"><strong>Fig 2.</strong> Some use.</p>
+
+# Usage
+
+## Installation
+
+1. **Optional:** Edit file `nsa` to apply your configurations.
+1. Paste the file `nsa` in wherever you'd like it to be.  Perhaps somewhere
+   in `PATH`.
+1. **Optional:** For convenient pasting of username and passwords, perhaps
+   add some shortcuts to your window manager.  These are shortcuts that I
+   use for my `i3`:
+
+   ```
+   bindsym $mod+i exec nsa stop
+   bindsym --release $mod+comma exec nsa do -c uod
+   bindsym --release $mod+period exec nsa do -c pod
+   ```
+
+   The command `nsa do -c uod` is an automation that loads the username into
+   the clipboard (`u`), pastes it by emulating `Control+V` (`o`), then deletes
+   the password from clipboard (`d`).  The other command `nsa do -c uod` does
+   the same except for the password.
+
+   You can add your own other commands against those fields, as well as others
+   such as URI and stored binary key files.
+
+## How I use _nsapass_
+
+### Database creation and housekeeping
+1. `nsa create` to create an empty database.  This is done only once.
+1. `nsa start` and type my high-entropy password to let _nsapass_'s backend
+   run in some window terminal, and keep it running there.
+1. Suppose that I'd like to add a new password entry for my _ProtonMail_
+   account, I open a new terminal and do:
+
+   `nsa add -t caveman protonmail -b 256 -r https://protonmail.com`
+
+   This will create a password with `256`bits of entropy, from the default
+   set of printable characters (customisable; see `-p` and `-o`), and a
+   couple of tags `paveman protonmail` for later retrieval.
+1. To save this entry, I:
+    1. Inspect it by `nsa diff`.  If I'd like to actually see the password,
+       I add the `-z` flag, i.e. `nsa diff -z`.
+    2. `nsa commit`.
+1. If i'm unhappy about what I see in `nsa diff`, I can modify it by
+   `nsa mod ...` (see `nsa mod -h`), delete it by `nsa del c p` (see `nsa
+   del -h`), or delete all scheduled changes by `nsa revert` (see `nsa
+   revert -h`).
+
+### Logging into things
+
+1. I retrieve it by `nsa do caveman protonmail` (or just `nsa do c p`
+   if the tags are unique enough, as _nsapass_ is smart to figure out
+   what you meant).  I usually type this command using `rofi`, `dmenu`,
+   etc, for maximum convenience.
+1. I go to my browser where _ProtonMail_'s login prompt is displaying,
+   and hit shortcut `$mod+comma`, which will paste the username for me.
+1. Press tab to move to the password field.
+1. Press `$mod+period` to paste the `256` entropy-bit password.
+
+# Dependencies
+
+- Python.
+- Any file encryption and decryption tool of your choice (as long as it can
+  read passwords and plaintext input as STDIN, and write ciphertext output
+  as STDOUT).
+
+  By default [`ciphart`](https://github.com/Al-Caveman/ciphart) is used.
+- Any external commands to do whatever you want with your entries.
+
+  By default [`xclip`](https://github.com/astrand/xclip) and
+  [`xdotool`](http://www.semicomplete.com/projects/xdotool) are used for
+  clipboard management and keyboard emulations, respectively.
+
+# Manual
+
 ```
-bindsym $mod+i exec nsa 2
+usage: nsa [-h] [-v] [-V] [-C] [-i DIR]
+           {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert} ...
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v                    show information about nsapass
+  -V                    show debugging information
+  -C                    disable colourful output
+  -i DIR                ipc directory
+
+commands:
+  {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert}
+    create              create a databases
+    chpass              change databases's password
+    start               starts nsapass
+    stop                stops nsapass and discards any uncommitted changes
+    do                  do things (e.g. type passwords)
+    add                 add an entry
+    del                 delete an entry
+    mod                 modify an entry
+    ls                  view entries
+    diff                show modifications done so far
+    commit              commit changes to the database
+    revert              revert all uncommitted changed back to original
 ```
-which makes my life _super_-mega-ultra easy.  basically, i run, say, `nsa
-cp c g` in a terminal, which puts my username (e.g. an email address) into
-my clipboard.  i then move to my browser and paste my cipboard's content
-into the username field.  finally, i just press `$mod+i` to signal to the
-`nsa cp c g` process _"psst! username is done, gimme the password now!"_.
-then i _immediately_ get the password and paste in the password field in my
-browser.  all without needing to jump around terminals!  no _need_ for
-browser integration when it is _this_ simple!  neat, isn't it?
-<p align="center"><img src="pics/mini_tutorial_5.png"></p>
+```
+usage: nsa create [-h] [-d DB] [-s]
 
-this is just the _beginning_.  i've made much more commands for you, _all_
-by myself<sup>*</sup>!
-<p align="center"><img src="pics/morecommands.png"></p>
+optional arguments:
+  -h, --help  show this help message and exit
+  -d DB       set passwords database path
+  -s          input from stdin
+```
+```
+usage: nsa chpass [-h] [-s]
 
-# dependencies
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+```
+```
+usage: nsa start [-h] [-s] [-d DB]
 
-- python.
-- any encryption/decryption app that can read passwords and plaintext input
-  as STDIN, and write ciphertext output as STDOUT.  default is
-  [`ciphart`](https://github.com/Al-Caveman/ciphart).
-- any keyboard typing app that takes value-to-type as STDIN, and then types
-  the value as if typed by keyboard.  default is
-  [`xdotool`](http://www.semicomplete.com/projects/xdotool).
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+  -d DB       set passwords database path
+```
+```
+usage: nsa stop [-h] [-s]
 
-# message from founder
-despite _all_ my engineering excellence and finesse, i'm still a maximally
-humble and a down-to-earth guy.  so, if you like some features, i'd like to
-see your patch.  if they it is sensible i'll merge it.  if i like your
-idea, i may even implemented it _myself_, by my very own hands, for _free_
-and _git commit-pull-merge-push_ it or me _and_ for you!  because i also
-care about _you_ and i want _you_ to be happy as well.
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+```
+```
+usage: nsa do [-h] [-s] [-c COMMANDS] [QUERY ...]
 
-----
+positional arguments:
+  QUERY        query tags
 
-<sup>* and [int-e](https://github.com/int-e)</sup>
+optional arguments:
+  -h, --help   show this help message and exit
+  -s           input from stdin
+  -c COMMANDS  perform actions specified in COMMANDS in order from left to
+               right. COMMANDS can be a string made of characters defined in
+               DO_COMMANDS. e.g. `nsa do caveman protonmail -c uod` copies the
+               username associated with the 'caveman protonmail' tags into the
+               selection buffer, pastes it, then deletes it from the selection
+               buffer.
+```
+```
+usage: nsa add [-h] [-t TAG [TAG ...]] [-u USERNAME] [-p SET] [-o LETTERS]
+               [-b BIT] [-l LEN] [-m] [-f PATH] [-r URI] [-n NOTE] [-s] [-z]
+
+optional arguments:
+  -h, --help        show this help message and exit
+  -t TAG [TAG ...]  new tags
+  -u USERNAME       new username
+  -p SET            pre-defined password letters set name
+  -o LETTERS        raw password letter options
+  -b BIT            generate BIT-entropy password from SET
+  -l LEN            generate LEN-long password from SET
+  -m                user-defined password
+  -f PATH           key/data file in PATH, or STDIN if "-"
+  -r URI            a uniform resource identifier
+  -n NOTE           a note
+  -s                input from stdin
+  -z                show passwords
+```
+```
+usage: nsa del [-h] [-s] [-z] [QUERY ...]
+
+positional arguments:
+  QUERY       query tags
+
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+  -z          show passwords
+```
+```
+usage: nsa mod [-h] [-t TAG [TAG ...]] [-u USERNAME] [-p SET] [-o LETTERS]
+               [-b BIT] [-l LEN] [-m] [-f PATH] [-r URI] [-n NOTE] [-s] [-z]
+               [QUERY ...]
+
+positional arguments:
+  QUERY             query tags
+
+optional arguments:
+  -h, --help        show this help message and exit
+  -t TAG [TAG ...]  new tags
+  -u USERNAME       new username
+  -p SET            pre-defined password letters set name
+  -o LETTERS        raw password letter options
+  -b BIT            generate BIT-entropy password from SET
+  -l LEN            generate LEN-long password from SET
+  -m                user-defined password
+  -f PATH           key/data file in PATH, or STDIN if "-"
+  -r URI            a uniform resource identifier
+  -n NOTE           a note
+  -s                input from stdin
+  -z                show passwords
+```
+```
+usage: nsa ls [-h] [-s] [-z] [QUERY ...]
+
+positional arguments:
+  QUERY       query tags
+
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+  -z          show passwords
+```
+```
+usage: nsa diff [-h] [-s] [-z]
+
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+  -z          show passwords
+```
+```
+usage: nsa commit [-h] [-s] [-d DB]
+
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+  -d DB       set passwords database path
+```
+```
+usage: nsa revert [-h] [-s]
+
+optional arguments:
+  -h, --help  show this help message and exit
+  -s          input from stdin
+```
+
+# Contact
+
+- Web: https://github.com/Al-Caveman/nsapass

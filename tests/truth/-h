@@ -1,28 +1,24 @@
-usage: nsa [-h] [-v] [-s] [-d DB]
-           {get,cat,add,del,undel,mod,undo,forget,ls,chpass,stop,u,p} ...
+usage: nsa [-h] [-v] [-V] [-C] [-i DIR]
+           {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert} ...
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v                    show app info
-  -s                    obtain all passwords from STDIN
-  -d DB                 path to database. default is
-                        "/home/maxtor/.local/share/nsapass/db.ciphart"
+  -v                    show information about nsapass
+  -V                    show debugging information
+  -C                    disable colourful output
+  -i DIR                ipc directory
 
 commands:
-  {get,cat,add,del,undel,mod,undo,forget,ls,chpass,stop,u,p}
-    get                 get username/password entry
-    cat                 write key file to stdout
+  {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert}
+    create              create a databases
+    chpass              change databases's password
+    start               starts nsapass
+    stop                stops nsapass and discards any uncommitted changes
+    do                  do things (e.g. type passwords)
     add                 add an entry
     del                 delete an entry
-    undel               undelete an entry
     mod                 modify an entry
-    undo                travel through time
-    forget              forget the past of an entry
     ls                  view entries
-    chpass              change databases's password
-    stop                command running `nsa` process to stop. handy for
-                        mapping to keyboard shortcuts
-    u                   command running `nsa` process to type the username.
-                        handy for mapping to keyboard shortcuts
-    p                   command running `nsa` process to type the password.
-                        handy for mapping to keyboard shortcuts
+    diff                show modifications done so far
+    commit              commit changes to the database
+    revert              revert all uncommitted changed back to original

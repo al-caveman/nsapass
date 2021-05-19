@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #
 # nsapass - a simple password manager.
-# Copyright (C) 2020 caveman
+# Copyright (C) 2021 caveman
 # https://github.com/al-caveman/nsapass
 #
 # This program is free software: you can redistribute it and/or modify
@@ -21,18 +21,17 @@ import argparse
 import os
 import sys
 import string
+import re
 import json
 import subprocess
 import time
+import math
 import secrets
+import hashlib
 import atexit
 import getpass
 import base64
-import shlex
-import textwrap
-import tempfile
 import signal
-
 
 #######################################
 #                             __      #
@@ -46,268 +45,309 @@ ENCODING = 'utf-8'
 # default terminal width when auto-detection fails
 TERMWIDTH = 80
 
-# location of ipc dir
-PID = '/tmp/nsapass'
+# location of ipc's named pipes
+IPC_DIR = '/tmp/nsapass'
 
 # location of encrypted passwords db
-DB = os.path.expanduser('~/.local/share/nsapass/db.ciphart')
+DATABASE_PATH = os.path.expanduser('~/.local/share/nsapass/db.ciphart')
 
 # password character sets
-SETS = {
+PASSWORD_SETS = {
     'alphanumerics' : string.ascii_letters + string.digits,
-    'hexdigits' : string.hexdigits,
-    'printable' : ''.join(c for c in string.printable if c not in
-        string.whitespace),
+    'hexdigits'     : string.hexdigits,
+    'printable'     : ''.join(c for c in string.printable if c not in
+                      string.whitespace)}
+
+# default passwords set
+DEFAULT_SET = 'printable'
+
+# whether session authentication happens.
+SESSION_AUTH = False
+
+# maximum number of seconds approved sessions can idle before expiring.
+# setting it to 0 will immediately timeout, so that every session needs an
+# approval.
+SESSION_TIMEOUT = 30
+
+# encrypt command
+ENCRYPT_COMMAND = {
+    'DELAY'         : 0,
+    'COMMAND'       : 'ciphart -eszk -o {DATABASE_PATH}',
+    'STDIN'         : '{DATABASE_PASSWORD}\n{DATABASE_DATA}',
+    'TAKE_STDERR'   : True,
+    'TAKE_STDOUT'   : True,
+    'RETURN_VALUES' : {
+        0   : None, # success, no error
+        1   : 'ciphart reported a general failure',
+        2   : 'ciphart reported libsodium failure',
+        3   : 'ciphart reported argument parsing failure',
+        4   : 'ciphart reported io failure',
+        5   : 'ciphart reported memory allocation failure',
+        6   : 'ciphart reported threading failure',
+        7   : 'ciphart reported bad password or corrupted input',
+       '*'  : 'ciphart reported an unknown failure' # default error
+    }
 }
 
-# maximum number seconds nsapass will idle before self-killing
-IDLE_TIMEOUT = 300
+# decrypt command
+DECRYPT_COMMAND = dict(ENCRYPT_COMMAND)
+DECRYPT_COMMAND['COMMAND'] = 'ciphart -dsk -i {DATABASE_PATH}'
+DECRYPT_COMMAND['STDIN'] = '{DATABASE_PASSWORD}'
 
-# command to load passwords db (must read password from stdin, and print
-# plaintext to stdout)
-DECCMD = 'ciphart -dsk -i {PATH}'
-DECIN= '{PASSWORD}'
-DECERRS = {
-    0   : None, # success code
-    1   : 'ciphart reported a general failure',
-    2   : 'ciphart reported libsodium failure',
-    3   : 'ciphart reported argument parsing failure',
-    4   : 'ciphart reported io failure',
-    5   : 'ciphart reported memory allocation failure',
-    6   : 'ciphart reported threading failure',
-    7   : 'ciphart reported bad password or corrupted input',
-   '*'  : 'ciphart reported an unknown failure' # default error
-}
-
-# command to save passwords db (must read password from stdin, then read
-# plain from stdin, then save output ciphertext to {PATH})
-ENCCMD = 'ciphart -eszk -o {PATH}'
-ENCIN= '{PASSWORD}\n{DATA}'
-ENCERRS = DECERRS
-
-# command to type usernames/passwords (must accept data from stdin)
-TYPECMD = 'xdotool -'
-TYPEIN= 'type {PASSWORD}\n'
-TYPEERRS = {0 : None, '*' : 'general xdotool error'}
-
-# nsapass sub-command to type username and password, respectively
-CMD_TYPE_USERNAME = 'u'
-CMD_TYPE_PASSWORD = 'p'
-
-# sleep delay before typing starts
-TYPEDELAY = 0.1
+# commands used by `nsa do -c COMMANDS`.  each command must be a single
+# letter.  below is an example of defining commands to copy and paste
+# various fields from the database.
+template_command = {
+    'DELAY'         : 0,
+    'COMMAND'       : 'xclip -selection clipboard',
+    'STDIN'         : '',
+    'TAKE_STDERR'   : False,
+    'TAKE_STDOUT'   : False,
+    'RETURN_VALUES' : {0:None, '*':'xclip error'}}
+DO_COMMANDS = {c:dict(template_command) for c in 'upkrdon'}
+DO_COMMANDS['u']['STDIN'] = '{USERNAME}'
+DO_COMMANDS['p']['STDIN'] = '{PASSWORD}'
+DO_COMMANDS['k']['STDIN'] = '{KEYFILE}'
+DO_COMMANDS['r']['STDIN'] = '{URI}'
+DO_COMMANDS['d']['STDIN'] = '--deleted by nsapass--'
+DO_COMMANDS['o']['COMMAND'] = 'xdotool key Control+V'
+DO_COMMANDS['n']['COMMAND'] = 'xdotool key Return'
 
 # theme
-THEME = {
-    'INFO'  : '\33[1;32m',
-    'WARN'  : '\33[1;33m',
-    'ERR'   : '\33[1;31m',
-    'CLR'   : '\33[0m',
-    'PASS'  : '\33[0;41m', # passwords color
-    'PROMPT': '\33[0;34m',
-    'KEY'   : '\33[0;90m',
-    'TAGS'  : '\33[1;32m',
-    'ARC'   : '\33[0;31m', # archived flag
-}
+COLOURS = {'RED'    : '\33[0;31m', 'BRED'   : '\33[1;31m',
+           'YELLOW' : '\33[0;33m', 'BGREEN' : '\33[1;32m',
+           'BLUE'   : '\33[0;34m', 'GRAY'   : '\33[0;90m',
+           'MAGENTA': '\33[0;35m', 'RESET'  : '\33[0m'}
+FORMAT = {
+    'DEBUG'     : '{MAGENTA}[debug]{RESET} {}\n',
+    'INFO'      : '{}\n',
+    'WARN'      : '{YELLOW}[warning]{RESET} {}\n',
+    'ERROR'     : '{RED}[error]{RESET} {}\n',
+    'QUESTION'  : '{BLUE}< {}{RESET} ',
+    'TAGS'      : '{BGREEN}{}{RESET}',
+    'USERNAME'  : '{YELLOW}[{}{YELLOW}]{RESET}',
+    'PASSWORD'  : '{RED}[{}{RED}]{RESET}',
+    'KEYFILE'   : '{RED}[{:.10}{RED}]{RESET}',
+    'TIME'      : '{BLUE}{}{RESET}',
+    'URI'       : '{MAGENTA}[{}{MAGENTA}]{RESET}',
+    'NOTE'      : '{GRAY}[{}]{RESET}',
+    'HIDDEN'    : '{GRAY}******{RESET}',
+    'NONE'      : '',
+    'ADD'       : '{BGREEN}+ {RESET}',
+    'DEL'       : '{BRED}- {RESET}',
+    'LIST'      : '{DIFF}{TIME} {TAGS} {USERNAME} {PASSWORD} ' \
+                  '{KEYFILE} {URI} {NOTE}\n'}
 
 #########################################
-# WARNING: normal ppl plz no looking!   #
-# WARNING: nude app bits ahead!         #
-#             (devs only)               #
+#                                       #
+#          WARNING:  DEVS ONLY          #
+#                                       #
 #########################################
 
-VERSION = '4.2.0'
-KEY_TAGS = 'tags'
-KEY_USERNAME= 'username'
-KEY_PASS = 'password'
-KEY_DATAB64 = 'datab64s'
-KEY_NOTE = 'note'
-KEY_TIME = 'timestamp'
-KEY_ARC = 'archived'
-KEY_PID = 'pid'
-SIG_USERNAME = signal.SIGUSR1
-SIG_PASSWORD = signal.SIGUSR2
+VERSION = '5.0.0'
+YEAR    = '2021'
 
-def frmtpass(password, showpass, limit=0):
-    """formats passwords based on its visibility setting"""
-    if showpass:
-        summary = ''
-        if limit and len(password) > limit:
-            summary = f'... ({len(password)} letters)'
-            password = password[:limit]
-        return '{PASS}{}{CLR}{}'.format(password, summary, **THEME)
-    return '**********'
+CMD_CREATE  = 'create'
+CMD_CHPASS  = 'chpass'
+CMD_START   = 'start'
+CMD_STOP    = 'stop'
+CMD_DO      = 'do'
+CMD_ADD     = 'add'
+CMD_DEL     = 'del'
+CMD_MOD     = 'mod'
+CMD_LS      = 'ls'
+CMD_DIFF    = 'diff'
+CMD_COMMIT  = 'commit'
+CMD_REVERT  = 'revert'
 
-def frmtask(msg):
-    return '{PROMPT}< {}{CLR} '.format(msg, **THEME)
+ARG_INFO        = 'v'
+ARG_STDIN_INPUT = 's'
+ARG_DB_PATH     = 'd'
+ARG_QUERY       = 'query'
+ARG_SHOWPASS    = 'z'
+ARG_TAGS        = 't'
+ARG_USERNAME    = 'u'
+ARG_PASS_SET    = 'p'
+ARG_PASS_OPT    = 'o'
+ARG_PASS_BIT    = 'b'
+ARG_PASS_LEN    = 'l'
+ARG_PASS_MAN    = 'm'
+ARG_PASS_KEY    = 'f'
+ARG_URI         = 'r'
+ARG_NOTE        = 'n'
+ARG_COMMANDS    = 'c'
+ARG_DEBUG       = 'V'
+ARG_NOCOLOUR    = 'C'
+ARG_IPC_DIR     = 'i'
 
-def printinfo(msg):
-    sys.stderr.write('{INFO}*{CLR} {}\n'.format(msg, **THEME))
+KEY_DB_USERNAME = 'username'
+KEY_DB_PASS     = 'password'
+KEY_DB_DATAB64  = 'datab64s'
+KEY_DB_URI      = 'uri'
+KEY_DB_NOTE     = 'note'
+KEY_DB_TIME     = 'timestamp'
+
+KEY_IPC_SESSION     = 'session'
+KEY_IPC_CMD         = 'command'
+KEY_IPC_ARGS        = 'arguments'
+KEY_IPC_PATH        = 'path'
+KEY_IPC_REPLY_TYPE  = 'type'
+KEY_IPC_REPLY_DATA  = 'data'
+
+VAL_IPC_REPLY_TYPE_OUT      = 'out'
+VAL_IPC_REPLY_TYPE_DEBUG    = 'debug'
+VAL_IPC_REPLY_TYPE_INFO     = 'info'
+VAL_IPC_REPLY_TYPE_WARN     = 'warn'
+VAL_IPC_REPLY_TYPE_ERR      = 'err'
+VAL_IPC_REPLY_TYPE_CMD      = 'command'
+VAL_IPC_REPLY_TYPE_ENTRY    = 'entry'
+
+enable_debug = True
+
+def frmtstr(s, frmt, show=True):
+    """formats a value"""
+    if not s: s = FORMAT['NONE'].format(s, **COLOURS)
+    elif not show: s = FORMAT['HIDDEN'].format(s, **COLOURS)
+    return FORMAT[frmt].format(s, **COLOURS)
+
+def frmtentry(tags, entry, showpass, diff=None):
+    """formats a database entry"""
+    username = frmtstr(entry[KEY_DB_USERNAME], 'USERNAME')
+    password = frmtstr(entry[KEY_DB_PASS], 'PASSWORD', showpass)
+    digest = frmtstr(entry[KEY_DB_DATAB64], 'KEYFILE')
+    uri = frmtstr(entry[KEY_DB_URI], 'URI')
+    note = frmtstr(entry[KEY_DB_NOTE], 'NOTE')
+    timestamp = frmtstr(time.ctime(entry[KEY_DB_TIME]), 'TIME')
+    values = {'DIFF'    : frmtstr(diff, diff) if diff else '',
+              'TAGS'    : frmtstr(tags, 'TAGS'),
+              'USERNAME': username,
+              'PASSWORD': password,
+              'KEYFILE' : digest,
+              'URI'     : uri,
+              'NOTE'    : note,
+              'TIME'    : timestamp}
+    return FORMAT['LIST'].format(**values)
+
+def log(msg, frmt):
+    """log various message types to terminal"""
+    sys.stderr.write(frmt.format(msg, **COLOURS))
     sys.stderr.flush()
-
-def printwarn(msg):
-    sys.stderr.write('{WARN}*{CLR} {}\n'.format(msg, **THEME))
-    sys.stderr.flush()
-
-def exit(msg):
-    sys.stderr.write('{ERR}*{CLR} {}\n'.format(msg, **THEME))
-    sys.stderr.write('{ERR}*{CLR} {}\n'.format('exiting...', **THEME))
-    sys.stderr.flush()
-    sys.exit(1)
+def debug(msg):
+    if enable_debug: log(msg, FORMAT['DEBUG'])
+def info(msg): log(msg, FORMAT['INFO'])
+def warn(msg): log(msg, FORMAT['WARN'])
+def err(msg): log(msg, FORMAT['ERROR'])
 
 def cleanwords(words):
-    if type(words) is list:
-        words = ' '.join(words)
-    words = ' '.join(words.split())
-    return None if words == '' else words
+    """guarantee that words are single-space-separated words or None"""
+    if not words: return None
+    if type(words) is list: words = ' '.join(words)
+    return ' '.join(words.split())
 
-def wrap(text, subseq_indent):
-    try:
-        termwidth = os.get_terminal_size()[0]
-    except OSError:
-        termwidth = TERMWIDTH
-    width = termwidth - len(subseq_indent)
-    wrapped_list = textwrap.wrap(text, width)
-    return f'\n{subseq_indent}'.join(wrapped_list)
-
-def search(query, options):
-    """searches for a string.  query can be a tags list or tags string"""
-    options.sort()
+def find(db, query):
+    """finds tags"""
+    tags_list = list(db)
+    tags_list.sort()
     query = cleanwords(query)
-    printinfo(f'searching with "{query}"...')
-    if query is None:
-        return options
-    if query in options:
-        return [query]
-    words = query.split()
-    matches = []
-    for o in options:
-        tags = o.split()
-        matched = False
-        matching_began = False
-        i = 0
-        for tag in tags:
-            if i < len(words):
-                if matching_began:
-                    if tag.find(words[i]) == 0:
-                        matched = True
-                        i += 1
-                    elif tag.find(words[i]) != 0:
-                        matched = False
-                elif tag.find(words[i]) == 0:
-                    matching_began = True
-                    matched = True
-                    i += 1
-        if matched and i == len(words):
-            matches.append(o)
-    return matches
+    if not query: return tags_list
+    if query in tags_list: return [query]
+    words_escaped = [re.escape(word) for word in query.split()]
+    query_re = r'(^| )' + r'.*? '.join(words_escaped)
+    return [tags for tags in tags_list if re.search(query_re, tags)]
 
 def ttyinput(prompt):
+    """read non-password input from tty"""
     sys.stdin = open('/dev/tty')
     return input(prompt)
 
+def ttyconfirm(prompt, default_yes=False, default_no=False):
+    yes = 'Y' if default_yes else 'y'
+    no = 'N' if default_no else 'n'
+    formatted_prompt = frmtstr(f'{prompt} [{yes}/{no}] ', 'QUESTION')
+    while True:
+        ans = ttyinput(formatted_prompt).lower()
+        if ans == '':
+            if default_yes: return True
+            if default_no: return False
+            err('an answer is required')
+        elif ans in {'y', 'yes'}: return True
+        elif ans in {'n', 'no'}: return False
+        else:
+            err(f'invalid answer "{ans}"')
+
+def auth(session, sessions):
+    """authorises sessions"""
+    if not SESSION_AUTH: return True
+    warn(f'incoming session {frmtstr(session, "PASSWORD")}...')
+    age = 0
+    if session in sessions:
+        age = SESSION_TIMEOUT + sessions[session] - time.time()
+    if age > 0:
+        warn(f'session not expired yet.  auto-approving...')
+    elif not ttyconfirm('approve this session?', default_yes=True):
+        warn(f'session rejected')
+        return False
+    warn(f'session authorised')
+    sessions[session] = time.time()
+    return True
+
 def askpass(name, confirm=False, stdin=False):
     """prompts users for password"""
-    while True:
-        if stdin:
-            printinfo(f'reading {name} password from stdin...')
-            pass1 = input()
-            pass2 = pass1
-        else:
-            pass1 = getpass.getpass(frmtask(f'{name} password:'))
-            if confirm:
-                pass2 = getpass.getpass(frmtask(f'confirm {name} pass:'))
-            else:
-                pass2 = pass1
-        if pass1 == pass2:
-            return pass1
-        printwarn('passwords mismatched.  retrying...')
+    f = input if stdin else getpass.getpass
+    pass1 = f(frmtstr(f'{name} password:', 'QUESTION'))
+    pass2 = pass1
+    if confirm:
+        pass1 = f(frmtstr(f'confirm password:', 'QUESTION'))
+    if pass1 == pass2:
+        return pass1
+    err('passwords mismatched')
+    sys.exit(1)
 
-def genpass(length, psetname, showpass):
-    """generate password"""
-    try:
-        length = int(length)
-        if length < 1:
-            exit(f'LEN "{length}" is not positive')
-    except ValueError:
-        exit(f'LEN "{length}" is not int')
-    try:
-        pset = SETS[psetname]
-    except KeyError:
-        exit(f'bad SET "{psetname}".  valid options: {", ".join(SETS)}')
-    printinfo(f'making a {length}-chars key from "{psetname}"...')
-    while True:
-        password = ''.join(secrets.choice(pset) for i in range(0, length))
-        if showpass:
-            sys.stderr.write(frmtpass(password, showpass) + '\n')
-            ans = ttyinput(frmtask('happy? [y/N]'))
-            if ans == 'y':
-                return password
-        else:
-            return password
+def genpass(bits, length, letters):
+    """dynamically generates passwords"""
+    if length and length < 1:
+        err(f'password length "{length}" is not positive')
+        sys.exit(1)
+    if bits:
+        if bits < 1:
+            err(f'password bits count "{bits}" is not positive')
+            sys.exit(1)
+        bits_to_length = math.ceil(bits / math.log2(len(letters)))
+        if not length or bits_to_length > length: length = bits_to_length
+    password = ''.join(secrets.choice(letters) for i in range(0, length))
+    return password
 
-def readdata(filein):
+def readdata(path):
     """read binary data from stdin"""
-    if filein == '-':
-        printinfo(f'reading binary data from stdin...')
-        data = sys.stdin.buffer.read()
-        if len(data) == 0:
-            exit('no data read from stdin')
+    info(f'reading binary data from "{path}"...')
+    if path == '-': f = sys.stdin.buffer
     else:
-        printinfo(f'reading binary data from "{filein}"...')
-        try:
-            with open(filein, 'rb') as f:
-                data = f.read()
+        try: f = open(path, 'rb')
         except FileNotFoundError:
-            exit(f'file "{filein}" not found')
-    datab64s = base64.b64encode(data).decode()
-    return datab64s
+            err(f'file "{path}" not found')
+            sys.exit(1)
+    data = f.read()
+    if data: return base64.b64encode(data).decode()
+    err(f'no data read from "{path}"')
+    sys.exit(1)
 
-def newpass(gen, manual, stdin, filein, showpass, required=False):
-    password = None
-    datab64s = None
-    if gen is not None:
-        password = genpass(gen[0], gen[1], showpass)
-    if manual or stdin:
-        password = askpass('new entry', confirm=True, stdin=stdin)
-    if filein is not None:
-        datab64s = readdata(filein)
-    if required and password is None and datab64s is None:
-        exit('password, or key, is required')
-    return (password, datab64s)
-
-def newtags(tags, required=False):
-    """picks a new set of tags"""
-    if tags is None and not required:
-        return None
-    while True:
-        tags = cleanwords(tags)
-        if tags is None:
-            tags = ttyinput(frmtask('specify tags:'))
-        else:
-            return tags
-
-def run(cmd, cmderrs, cmdin, has_stdout=False, has_stderr=False,
-    exitonerror=False
-):
-    """runs and interacts with external commands"""
-    stdout = subprocess.PIPE if has_stdout else None
-    stderr = subprocess.PIPE if has_stderr else None
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=stdout,
-        stderr=stderr, shell=True, encoding=ENCODING)
-    p_stdout, _ = p.communicate(input=cmdin)
-    f = exit if exitonerror else printwarn
-    r = p.returncode if p.returncode in cmderrs else '*'
-    try:
-        if cmderrs[r] is not None:
-            f(cmderrs[r])
-    except KeyError:
-        f(f'unknown command return code "{p.returncode}"')
-    return p_stdout, p.returncode
+def run(command, values):
+    """run an external command"""
+    time.sleep(command['DELAY'])
+    p = subprocess.Popen(
+            command['COMMAND'].format(**values),
+            stdin   = subprocess.PIPE if command['STDIN'] else None,
+            stdout  = subprocess.PIPE if command['TAKE_STDOUT'] else None,
+            stderr  = subprocess.PIPE if command['TAKE_STDERR'] else None,
+            shell   = True,
+            encoding=ENCODING)
+    p_stdout, _ = p.communicate(input=command['STDIN'].format(**values))
+    r = p.returncode if p.returncode in command['RETURN_VALUES'] else '*'
+    return p_stdout, command['RETURN_VALUES'][r]
 
 def lock(path):
-    """lock passwords database file"""
-    printinfo(f'locking {path}...')
+    """lock path"""
+    debug(f'locking "{path}"...')
     lockpath = path + '.lock'
     dirname = os.path.dirname(lockpath)
     if len(dirname):
@@ -315,507 +355,446 @@ def lock(path):
     try:
         open(lockpath, 'xb').close()
     except FileExistsError:
-        exit(f'lock file "{lockpath}" exists.  delete it if not used')
+        err(f'lock file "{lockpath}" exists.  delete it if not used')
+        sys.exit(1)
     atexit.register(os.unlink, lockpath)
-    atexit.register(printinfo, f'unlocking "{path}"...')
+    atexit.register(debug, f'unlocking "{path}"...')
 
-def load(path, stdin, nonempty=False):
-    """load passwords database"""
-    printinfo('loading db...')
-    if os.path.exists(path):
-        cmd = DECCMD.format(**{'PATH' : path})
-        while True:
-            dbpass = askpass('database', stdin=stdin)
-            decin = DECIN.format(**{'PASSWORD' : dbpass})
-            data, exitstatus = run(cmd, DECERRS, decin, has_stdout=True,
-                                    has_stderr=True)
-            if exitstatus == 0:
-                break
-    else:
-        printwarn(f'"{path}" not found')
-        dbpass = None
-        data = '{}'
+def load_json(path):
+    """loads a json file"""
+    if not os.path.exists(path):
+        err(f'could not find file "{path}"')
+        sys.exit(1)
+    with open(path, 'r') as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            err(f'failed to decode json file "{path}"')
+    sys.exit(1)
+
+def load_db(path, stdin):
+    """load database"""
+    debug(f'loading "{path}"...')
+    if not os.path.exists(path):
+        err(f'database "{path}" not found.  did you create it?')
+        sys.exit(1)
+    password = askpass('database', stdin=stdin)
+    values = {'DATABASE_PATH' : path, 'DATABASE_PASSWORD' : password}
+    data, err_msg = run(DECRYPT_COMMAND, values)
+    if err_msg:
+        err(err_msg)
+        sys.exit(1)
     try:
         db = json.loads(data)
+        # temporary code for migration from pre v5.0.0 db format
+        # TODO: remove this eventually
+        for tags in db:
+            if type(db[tags]) is list:
+                entry = db[tags][0]
+                db[tags] = entry
+            if KEY_DB_URI not in db[tags]: db[tags][KEY_DB_URI] = None
+        return db, password
     except json.JSONDecodeError:
-        exit(f'error decoding database "{path}"')
-    if len(db) == 0 and nonempty:
-        exit('database is empty')
-    signal.alarm(IDLE_TIMEOUT)
-    return db, dbpass
+        err(f'error decoding database "{path}"')
+    sys.exit(1)
 
-def save(db, dbpass, stdin, path):
-    """save passwords database"""
-    if dbpass is None:
-        dbpass = askpass('new database', confirm=True, stdin=stdin)
-    while not stdin:
-        ans = ttyinput(frmtask('save? [y/n]'))
-        if ans == 'y':
-            break
-        if ans == 'n':
-            return
-    printinfo('saving db...')
-    data = json.dumps(db, indent=4)
-    encin = ENCIN.format(**{'PASSWORD' : dbpass, 'DATA' : data})
+def save_db(db, path, password):
+    """save database"""
+    debug(f'saving database "{path}"...')
     path_tmp = path + '.temp'
-    cmd = ENCCMD.format(**{'PATH' : path_tmp})
-    try:
-        run(cmd, ENCERRS, encin, has_stderr=True,
-            exitonerror=True)
-        os.rename(path_tmp, path)
-    finally:
-        try:
-            os.unlink(path_tmp)
-        except FileNotFoundError:
-            pass
+    data = json.dumps(db, indent=4)
+    values = {
+        'DATABASE_PATH'     : path_tmp,
+        'DATABASE_PASSWORD' : password,
+        'DATABASE_DATA'     : data
+    }
+    _, err_msg = run(ENCRYPT_COMMAND, values)
+    if err_msg:
+        os.unlink(path_tmp)
+        err(err_msg)
+        sys.exit(1)
+    os.rename(path_tmp, path)
 
-def picktags(db, query, arc=False):
-    """picks a unique tags entry"""
-    options = [t for t in db if db[t][0][KEY_ARC] is arc]
-    while True:
-        matches = search(query, options)
-        if len(matches) == 0:
-            printwarn('no match.  available tags list:')
-            for o in options:
-                sys.stderr.write(f'    {o}\n')
-        elif len(matches) > 1:
-            printwarn('too many matched tags:')
-            for o in matches:
-                sys.stderr.write(f'    {o}\n')
-        elif len(matches) == 1:
-            printinfo(f'matched: {matches[0]}')
-            return matches[0]
-        query = ttyinput(frmtask('specify query tags:'))
+def ipc_init(path):
+    """prepares stuff needed for ipc"""
+    dirname = os.path.dirname(path)
+    if len(dirname): os.makedirs(dirname, exist_ok=True)
+    try: os.mkfifo(path, mode=400)
+    except NotImplementedError:
+        err("your operating system doesn't support named pipes")
+        sys.exit(1)
+    except FileExistsError:
+        err(f'file "{path}" exists.  delete it if not used')
+        sys.exit(1)
+    atexit.register(os.unlink, path)
+    atexit.register(debug, f'deleting named pipe "{path}"...')
 
-def pickrev(db, tags, rev, required=False):
-    "pick a unique revision"""
-    if not required:
-        if rev is None:
-            return 0
-        return rev
-    revs = range(0, len(db[tags]))
-    while True:
-        if rev in revs:
-            return rev
-        rev = ttyinput(frmtask(f'pick REV in {{0, ..., {len(revs)-1}}}:'))
-        try:
-            rev = int(rev)
-            if rev < 0:
-                printwarn('revision must be positive')
-        except ValueError:
-            printwarn('revision must be an integer')
+def ipc_session(stdin):
+    """obtain ipc session key"""
+    return askpass('session', stdin=stdin) if SESSION_AUTH else None
 
-def printentry(db, tags, showpass=False, showold=False):
-    """print a password entry"""
-    sys.stderr.write('  {TAGS}{}{CLR}{ARC}{}{CLR}\n'.format(
-        tags, ' [archived]' if db[tags][0][KEY_ARC] else '', **THEME))
-    indent = '    '
-    for r in range(0, len(db[tags]) if showold else 1):
-        if r:
-            sys.stderr.write('      {KEY}{}:{CLR} {}\n'.format(
-                'revision', r, **THEME))
-            indent = '        '
-            sys.stderr.write('{}{KEY}{:9}:{CLR} {}{ARC}{}{CLR}\n'.format(
-                indent, 'tags', db[tags][r][KEY_TAGS], ' [archived]' if
-                db[tags][r][KEY_ARC] else '', **THEME))
-        for key in [KEY_USERNAME, KEY_PASS, KEY_DATAB64, KEY_TIME,
-            KEY_NOTE]:
-            value = db[tags][r][key]
-            if value is None:
-                continue
-            if key == KEY_PASS:
-                value = frmtpass(value, showpass)
-            elif key == KEY_DATAB64:
-                value = frmtpass(value, showpass, 30)
-            elif key == KEY_TIME:
-                value = time.ctime(value)
-            elif key == KEY_NOTE:
-                keywidth = 11
-                subseq_indent = indent + ' ' * keywidth
-                value = wrap(value, subseq_indent)
-            sys.stderr.write('{}{KEY}{:9}:{CLR} {}\n'.format(
-                indent, key, value, **THEME))
+def ipc_request(path, command, rargs, stdin=False):
+    """define ipc request messages"""
+    return {KEY_IPC_SESSION : ipc_session(stdin),
+            KEY_IPC_CMD     : command,
+            KEY_IPC_ARGS    : rargs,
+            KEY_IPC_PATH    : path}
 
-def add(db, tags, username, password, datab64s, note):
-    """add a new entry from db"""
-    printinfo('adding entry...')
-    entry = {KEY_TAGS:tags, KEY_USERNAME:username, KEY_PASS:password,
-        KEY_DATAB64:datab64s, KEY_NOTE:note, KEY_TIME:time.time(),
-        KEY_ARC:False}
-    if tags in db:
-        printwarn(f'"{tags}" exists.  additing as a new revision...')
-        db[tags].insert(0, entry)
-    else:
-        db[tags] = [entry]
+def ipc_reply(reply_type, data):
+    """define ipc reply messages"""
+    return [{KEY_IPC_REPLY_TYPE : reply_type, KEY_IPC_REPLY_DATA : data}]
+def ipc_out(message)  : return ipc_reply(VAL_IPC_REPLY_TYPE_OUT, message)
+def ipc_debug(message): return ipc_reply(VAL_IPC_REPLY_TYPE_DEBUG, message)
+def ipc_info(message) : return ipc_reply(VAL_IPC_REPLY_TYPE_INFO, message)
+def ipc_warn(message) : return ipc_reply(VAL_IPC_REPLY_TYPE_WARN, message)
+def ipc_err(message)  : return ipc_reply(VAL_IPC_REPLY_TYPE_ERR, message)
+def ipc_command(values): return ipc_reply(VAL_IPC_REPLY_TYPE_CMD, values)
+def ipc_entry(db, tags, showpass, diff=None):
+    entry = dict(db[tags])
+    if entry[KEY_DB_PASS] and not showpass: entry[KEY_DB_PASS] = '****'
+    if entry[KEY_DB_DATAB64]:
+        datab64 = entry[KEY_DB_DATAB64].encode()
+        entry[KEY_DB_DATAB64] = hashlib.sha3_224(datab64).hexdigest()
+    return ipc_reply(VAL_IPC_REPLY_TYPE_ENTRY, (tags, entry, diff))
 
-def delete(db, tags):
-    """delete an entry from db"""
-    if db[tags][0][KEY_ARC]:
+def ipc_do(db, last_query, rargs):
+    """implements `do` sub-command"""
+    query = rargs[ARG_QUERY]
+    if not query: query = last_query
+    tags_list = find(db, query)
+    if not tags_list: return ipc_err('nothing matched')
+    replies = []
+    for tags in tags_list:
+        replies += ipc_command({
+            'USERNAME'  : db[tags][KEY_DB_USERNAME],
+            'PASSWORD'  : db[tags][KEY_DB_PASS],
+            'KEYFILE'   : db[tags][KEY_DB_DATAB64],
+            'URI'       : db[tags][KEY_DB_URI]})
+    return replies
+
+def ipc_add(db, rargs):
+    """implements `add` sub-command"""
+    args, password, datab64s = rargs
+    tags, username, uri, note, showpass = (args[k] for k in
+        (ARG_TAGS, ARG_USERNAME, ARG_URI, ARG_NOTE, ARG_SHOWPASS))
+    tags = cleanwords(tags)
+    if tags in db: return ipc_err(f'tags "{tags}" already exists')
+    db[tags] = {KEY_DB_USERNAME : username,
+                KEY_DB_PASS     : password,
+                KEY_DB_DATAB64  : datab64s,
+                KEY_DB_URI      : uri,
+                KEY_DB_NOTE     : note,
+                KEY_DB_TIME     : time.time()}
+    return ipc_entry(db, tags, showpass, 'ADD')
+
+def ipc_del(db, rargs):
+    """implements `del` sub-command"""
+    query, showpass = rargs[ARG_QUERY], rargs[ARG_SHOWPASS]
+    tags_list = find(db, query)
+    if not tags_list:
+        return ipc_err('nothing matched')
+    replies = []
+    for tags in tags_list:
+        replies += ipc_entry(db, tags, showpass, 'DEL')
         del db[tags]
-    else:
-        tmp = dict(db[tags][0])
-        tmp[KEY_ARC] = True
-        tmp[KEY_TIME] = time.time()
-        db[tags].insert(0, tmp)
+    return replies
 
-def undelete(db, tags):
-    """undelete an entry from db"""
-    if db[tags][0][KEY_ARC]:
-        tmp = dict(db[tags][0])
-        tmp[KEY_ARC] = False
-        tmp[KEY_TIME] = time.time()
-        db[tags].insert(0, tmp)
+def ipc_mod(db, rargs):
+    """implements `mod` sub-command"""
+    args, password, datab64s = rargs
+    query, tags, username, uri, note, showpass = (args[k] for k in
+        (ARG_QUERY, ARG_TAGS, ARG_USERNAME, ARG_URI, ARG_NOTE,
+        ARG_SHOWPASS))
+    tags = cleanwords(tags)
+    tags_list = find(db, query)
+    if not tags_list:
+        return ipc_err('nothing matched')
+    replies = []
+    for cur_tags in tags_list:
+        entry = db[cur_tags]
+        replies += ipc_entry(db, cur_tags, showpass, 'DEL')
+        entry[KEY_DB_TIME] = time.time()
+        if username: entry[KEY_DB_USERNAME] = username
+        if password: entry[KEY_DB_PASS] = password
+        if datab64s: entry[KEY_DB_DATAB64] = datab64s
+        if uri: entry[KEY_DB_URI] = uri
+        if note: entry[KEY_DB_NOTE] = note
+        if tags and tags != cur_tags:
+            db[tags] = db[cur_tags]
+            del db[cur_tags]
+            cur_tags = tags
+        replies += ipc_entry(db, cur_tags, showpass, 'ADD')
+    return replies
 
-def timetravel(db, tags, rev):
-    """travel into time rev"""
-    printinfo('traveling through time...')
-    tmp = db[tags].pop(rev)
-    db[tags].insert(0, tmp)
-    db[tmp[KEY_TAGS]] = db.pop(tags)
-    return tmp[KEY_TAGS]
+def ipc_ls(db, rargs):
+    """implements `ls` sub-command"""
+    query, showpass = rargs[ARG_QUERY], rargs[ARG_SHOWPASS]
+    tags_list = find(db, query)
+    if not tags_list: return ipc_err('nothing matched')
+    replies = []
+    for tags in tags_list:
+        replies += ipc_entry(db, tags, showpass)
+    return replies
 
-def modify(db, cur_tags, new_tags, username, password, datab64s, note):
-    """modify an entry from db"""
-    printinfo('modifying...')
-    tmp = dict(db[cur_tags][0])
-    if new_tags is not None:
-        tmp[KEY_TAGS] = new_tags
-    if username is not None:
-        tmp[KEY_USERNAME] = None if username == '' else username
-    if password is not None:
-        tmp[KEY_PASS] = None if password == '' else password
-    if datab64s is not None:
-        tmp[KEY_DATAB64] = None if datab64s == '' else datab64s
-    if note is not None:
-        tmp[KEY_NOTE] = None if note == '' else note
-    tmp[KEY_TIME] = time.time()
-    db[cur_tags].insert(0, tmp)
-    if new_tags is not None:
-        db[new_tags] = db.pop(cur_tags)
+def ipc_diff(db, db_orig, password, password_orig, rargs):
+    """implements `diff` sub-command"""
+    showpass = rargs[ARG_SHOWPASS]
+    replies = []
+    current_tags = set(db)
+    original_tags = set(db_orig)
+    additions = current_tags - original_tags
+    deletions = original_tags - current_tags
+    modifications = current_tags.intersection(original_tags)
+    for tags in additions:
+        replies += ipc_entry(db, tags, showpass, 'ADD')
+    for tags in deletions:
+        replies += ipc_entry(db_orig, tags, showpass, 'DEL')
+    for tags in modifications:
+        for k in db[tags]:
+            if db[tags][k] != db_orig[tags][k]:
+                replies += ipc_entry(db_orig, tags, showpass, 'DEL')
+                replies += ipc_entry(db, tags, showpass, 'ADD')
+                continue
+    if password != password_orig:
+        passfrmt = frmtstr(password, 'PASSWORD', showpass)
+        replies += ipc_warn(f'updated database password to {passfrmt}')
+    if not replies: replies += ipc_info('nothing to commit')
+    return replies
 
-def forget(db, tags, retain):
-    """forget the distant past of an entry from db"""
-    db[tags] = db[tags][0:retain+1]
-
-retrieved_username = None
-retrieved_password = None
-def type_value(signum, frame):
-    """type retrieved field"""
-    signal.alarm(IDLE_TIMEOUT)
-    value = None
-    if signum == SIG_USERNAME:
-        value = retrieved_username
-        field = 'username'
-    else:
-        value = retrieved_password
-        field = 'password'
-    printinfo(f'typing {field}...')
-    time.sleep(TYPEDELAY)
-    if value is not None:
-        # loop needed because xdotool doesn't print space peacefully, and
-        # doesn't seem to support space escaping, or escaping internal
-        # quotes (should i surround the whole value by quotes)
-        parts = value.split(' ')
-        for i in range(0, len(parts)):
-            if i:
-                typein = TYPEIN.format(**{'PASSWORD' : '" "'})
-                run(TYPECMD, TYPEERRS, typein, exitonerror=True)
-            if len(parts[i]):
-                typein = TYPEIN.format(**{'PASSWORD' : parts[i]})
-                run(TYPECMD, TYPEERRS, typein, exitonerror=True)
-    else:
-        printwarn(f'{field} is not retrieved')
-
-def timed_out(signum, frame):
-    printinfo("session timed out.  exiting...")
+# register signals
+def handler_sigint(signum, frame):
+    info('received interrupt.  exiting...')
     sys.exit(0)
+signal.signal(signal.SIGINT, handler_sigint)
+signal.signal(signal.SIGTERM, handler_sigint)
 
 # parse arguments
-# commands are specified by their name, list of command arguments, and
-# extra named arguments for `add_parser`.
-# arguments are specified by their named arguments to `add_argument`.
-# 'PASSWORD' stands for `[-g LEN SET | -m]` and is handled separately.
+cmdname = os.path.basename(sys.argv[0])
 allcmds = [
-    ['get', ['tags', '-r', '-a', '-z'],
-        {'help':'get username/password entry'}],
-    ['cat', ['tags', '-r', '-a', '-z'],
-        {'help':'write key file to stdout'}],
-    ['add', ['tags', '-u', 'PASSWORD', '-n', '-z'],
-        {'help':'add an entry'}],
-    ['del', ['tags', '-a', '-z'],
-        {'help':'delete an entry'}],
-    ['undel', ['tags', '-z'],
-        {'help':'undelete an entry'}],
-    ['mod', ['tags', '-t', '-u', 'PASSWORD', '-n', '-a', '-z'],
-        {'help':'modify an entry'}],
-    ['undo', ['tags', '-r', '-a', '-z'],
-        {'help':'travel through time'}],
-    ['forget', ['tags', '-r', '-a', '-z'],
-        {'help':'forget the past of an entry'}],
-    ['ls', ['tags', '-o', '-a', '-z'],
-        {'help':'view entries'}],
-    ['chpass', [],
+    [CMD_CREATE, [ARG_DB_PATH, ARG_STDIN_INPUT],
+        {'help':"create a databases"}],
+    [CMD_CHPASS, [ARG_STDIN_INPUT],
         {'help':"change databases's password"}],
-    ['stop', [],
-        {'help':"command running `nsa` process to stop.  handy "
-                "for mapping to keyboard shortcuts"}],
-    [CMD_TYPE_USERNAME, [],
-        {'help':"command running `nsa` process to type the "
-                "username.  handy for mapping to keyboard shortcuts"}],
-    [CMD_TYPE_PASSWORD, [],
-        {'help':"command running `nsa` process to type the "
-                "password.  handy for mapping to keyboard shortcuts"}],
+    [CMD_START, [ARG_STDIN_INPUT, ARG_DB_PATH],
+        {'help':'starts nsapass'}],
+    [CMD_STOP, [ARG_STDIN_INPUT],
+        {'help':'stops nsapass and discards any uncommitted changes'}],
+    [CMD_DO , [ARG_QUERY, ARG_STDIN_INPUT, ARG_COMMANDS],
+        {'help':'do things (e.g. type passwords)'}],
+    [CMD_ADD, [ARG_TAGS, ARG_USERNAME, ARG_PASS_SET, ARG_PASS_OPT,
+        ARG_PASS_BIT, ARG_PASS_LEN, ARG_PASS_MAN, ARG_PASS_KEY, ARG_URI,
+        ARG_NOTE, ARG_STDIN_INPUT, ARG_SHOWPASS], {'help':'add an entry'}],
+    [CMD_DEL, [ARG_QUERY, ARG_STDIN_INPUT, ARG_SHOWPASS],
+        {'help':'delete an entry'}],
+    [CMD_MOD, [ARG_QUERY, ARG_TAGS, ARG_USERNAME, ARG_PASS_SET,
+        ARG_PASS_OPT, ARG_PASS_BIT, ARG_PASS_LEN, ARG_PASS_MAN,
+        ARG_PASS_KEY, ARG_URI, ARG_NOTE, ARG_STDIN_INPUT, ARG_SHOWPASS],
+        {'help':'modify an entry'}],
+    [CMD_LS, [ARG_QUERY, ARG_STDIN_INPUT, ARG_SHOWPASS],
+        {'help':'view entries'}],
+    [CMD_DIFF, [ARG_STDIN_INPUT, ARG_SHOWPASS],
+        {'help':'show modifications done so far'}],
+    [CMD_COMMIT, [ARG_STDIN_INPUT, ARG_DB_PATH],
+        {'help':'commit changes to the database'}],
+    [CMD_REVERT, [ARG_STDIN_INPUT],
+        {'help':'revert all uncommitted changed back to original'}],
 ]
 allargs = {
-    'tags': {'metavar':'TAG', 'type':str, 'nargs':'*',
-            'help':'query tags'},
-    '-r': {'metavar':'REV', 'type':int,
-        'help':"revision index to travel to"},
-    '-o': {'action':'store_true', 'help':'show old history'},
-    '-a': {'action':'store_true', 'help':'work on the archive'},
-    '-z': {'action':'store_true', 'help':'show passwords'},
-    '-t': {'metavar':'TAG', 'type':str, 'nargs':'+',
-        'help':"new entry's tags"},
-    '-u': {'metavar':'USERNAME', 'type':str, 'help':'new username'},
-    '-n': {'metavar':'NOTE', 'type':str, 'help':'new note'},
-}
+    ARG_QUERY   : {'metavar':'QUERY', 'type':str, 'nargs':'*',
+                    'help':'query tags'},
+    ARG_TAGS    : {'metavar':'TAG', 'type':str, 'nargs':'+',
+                    'help':"new tags"},
+    ARG_USERNAME: {'metavar':'USERNAME', 'type':str,
+                    'help':'new username'},
+    ARG_PASS_SET: {'metavar':'SET', 'type':str, 'default':DEFAULT_SET,
+                    'help':'pre-defined password letters set name'},
+    ARG_PASS_OPT: {'metavar':'LETTERS', 'type':str,
+                    'help':'raw password letter options'},
+    ARG_PASS_BIT: {'metavar':'BIT', 'type':int,
+                    'help':'generate BIT-entropy password from SET'},
+    ARG_PASS_LEN: {'metavar':'LEN', 'type':int,
+                    'help':'generate LEN-long password from SET'},
+    ARG_PASS_MAN: {'action':'store_true', 'help':'user-defined password'},
+    ARG_PASS_KEY: {'metavar':'PATH', 'type':str,
+                    'help':'key/data file in PATH, or STDIN if "-"'},
+    ARG_URI     : {'metavar':'URI', 'type':str,
+                    'help':"a uniform resource identifier"},
+    ARG_NOTE    : {'metavar':'NOTE', 'type':str, 'help':"a note"},
+    ARG_COMMANDS: {'metavar':'COMMANDS', 'type':str, 'default':'',
+                    'help': f"""perform actions specified in COMMANDS in
+                    order from left to right.  COMMANDS can be a string
+                    made of characters defined in DO_COMMANDS.  e.g. `nsa
+                    do caveman protonmail -c uod` copies the username
+                    associated with the 'caveman protonmail' tags into the
+                    selection buffer, pastes it, then deletes it from the
+                    selection buffer."""},
+    ARG_SHOWPASS    : {'action':'store_true', 'help':'show passwords'},
+    ARG_STDIN_INPUT : {'action':'store_true', 'help':'input from stdin'},
+    ARG_DB_PATH     : {'metavar':'DB', 'type':str,
+                        'help':'set passwords database path'}}
 parser = argparse.ArgumentParser()
-parser.add_argument('-v', action='store_true', help='show app info')
-parser.add_argument('-s', action='store_true',
-                    help='obtain all passwords from STDIN')
-parser.add_argument('-d', metavar='DB', type=str,
-                    help=f'path to database.  default is "{DB}"')
+parser.add_argument('-' + ARG_INFO, action='store_true',
+                    help='show information about nsapass')
+parser.add_argument('-' + ARG_DEBUG, action='store_true',
+                    help='show debugging information')
+parser.add_argument('-' + ARG_NOCOLOUR, action='store_true',
+                    help='disable colourful output')
+parser.add_argument('-' + ARG_IPC_DIR, metavar='DIR', type=str,
+                    help='ipc directory')
 subparsers = parser.add_subparsers(title='commands', dest='command')
 for cmd_name, cmd_args, cmd_named in allcmds :
     subp = subparsers.add_parser(cmd_name, **cmd_named)
     for arg in cmd_args:
-        if arg == 'PASSWORD':
-            muex = subp.add_mutually_exclusive_group()
-            muex.add_argument('-g', metavar=('LEN', 'SET'),
-                nargs=2, type=str,
-                help='generate a new LEN-long password from SET')
-            muex.add_argument('-m', action='store_true',
-                help='manually define password from getpass')
-            subp.add_argument('-f', metavar='FILE', type=str,
-                help='key via file FILE, or STDIN if FILE is "-"')
-        else:
-            subp.add_argument(arg, **allargs[arg])
+        arg_prefix = '-' if len(arg) == 1 else ''
+        subp.add_argument(arg_prefix + arg, **allargs[arg])
 args = parser.parse_args()
 
-# part where stuff start happening
+# some usability stuff
+if args.v:
+    sys.stdout.write(
+     f"nsapass v{VERSION}  copyright (C) {YEAR}  caveman\n"
+     "https://github.com/Al-Caveman/nsapass\n\n"
+     "this program comes with ABSOLUTELY NO WARRANTY; for details\n"
+     "read https://github.com/Al-Caveman/nsapass/blob/master/LICENSE\n")
+    sys.exit()
+if args.command is None:
+    parser.print_help()
+    sys.exit()
+enable_debug = args.V
+if args.C:
+    for c in COLOURS: COLOURS[c] = ''
+if args.i: IPC_DIR = args.i
+
+# starts the server loop
+ipc_server_path = f'{IPC_DIR}/server'
+if args.command == CMD_START:
+    ipc_init(ipc_server_path)
+    path = args.d if args.d else DATABASE_PATH
+    lock(path)
+    db, password = load_db(path, args.s)
+    db_orig = {tags:dict(db[tags]) for tags in db}
+    password_orig = password
+    last_do_query = None
+    sessions = {}
+    info('waiting for ipc commands...')
+    while True:  # runs indefinitely until stopped by SIGINT or `CMD_STOP`
+        request = load_json(ipc_server_path)
+        session = request[KEY_IPC_SESSION]
+        rcmd = request[KEY_IPC_CMD]
+        rargs = request[KEY_IPC_ARGS]
+        client_ipc_path = request[KEY_IPC_PATH]
+        debug(f'got ipc request {rcmd} {rargs}')
+
+        # implement nsapass's sub-commands
+        replies = []
+        if not auth(session, sessions):
+            replies += ipc_err('requested session got denied')
+        elif rcmd == CMD_CHPASS:
+            password = rargs
+            replies += ipc_info('database password updated')
+        elif rcmd == CMD_DO :
+            replies += ipc_do(db, last_do_query, rargs)
+            if rargs[ARG_QUERY]: last_do_query = rargs[ARG_QUERY]
+        elif rcmd == CMD_ADD:   replies += ipc_add(db, rargs)
+        elif rcmd == CMD_DEL:   replies += ipc_del(db, rargs)
+        elif rcmd == CMD_MOD:   replies += ipc_mod(db, rargs)
+        elif rcmd == CMD_LS :   replies += ipc_ls(db, rargs)
+        elif rcmd == CMD_DIFF:  replies += ipc_diff(db, db_orig, password,
+                                                    password_orig, rargs)
+        elif rcmd == CMD_COMMIT:
+            if rargs: path = rargs
+            db_orig = dict(db)
+            save_db(db, path, password)
+            replies += ipc_info(f'database committed to "{path}"')
+        elif rcmd == CMD_REVERT:
+            db = dict(db_orig)
+            replies += ipc_info('reverted working database to original')
+
+        # write replies back to client
+        debug(f'writing to "{client_ipc_path}" ipc reply {replies}...')
+        if os.path.exists(client_ipc_path):
+            with open(client_ipc_path, 'w') as f:
+                json.dump(replies, f)
+
+        # stop nsapass
+        if rcmd == CMD_STOP:
+            info(f'stopping nsapass...')
+            sys.exit()
+
+# create nsapass passwords database
+if args.command == CMD_CREATE:
+    path = args.d if args.d else DATABASE_PATH
+    if os.path.exists(path):
+        err(f'database "{path}" already exists')
+        sys.exit(1)
+    lock(path)
+    password = askpass('new database', confirm=True, stdin=args.s)
+    save_db({}, path, password)
+    info(f'database created in "{path}"')
+    sys.exit(0)
+
+# define values needed for various commands
+if args.command == CMD_CHPASS:
+    new_db_pass = askpass('new database', confirm=True, stdin=args.s)
+elif args.command in {CMD_ADD, CMD_MOD}:
+    password, datab64s = None, None
+    if args.p not in PASSWORD_SETS:
+        err(f'set "{args.p}" is not among: {", ".join(PASSWORD_SETS)}')
+        sys.exit(1)
+    letters = args.o if args.o else PASSWORD_SETS[args.p]
+    if args.b or args.l:
+        password = genpass(args.b, args.l, letters)
+    if args.m: password = askpass('new entry', confirm=True, stdin=args.s)
+    if args.f: datab64s = readdata(args.f)
+
+# terminate useless cases early on
+if args.command == CMD_ADD and not args.t:
+    err('tags are required')
+    sys.exit(1)
+
+# prepare things to talk to server
+if not os.path.exists(ipc_server_path):
+    err(f'ipc path "{ipc_server_path}" not found.  nsapass started?')
+    sys.exit(1)
+lock(ipc_server_path)
+ipc_client_path = f'{IPC_DIR}/client.{os.getpid()}'
+ipc_init(ipc_client_path)
+if args.command == CMD_CHPASS: rargs = new_db_pass
+elif args.command in {CMD_ADD, CMD_MOD}:
+    rargs = [vars(args), password, datab64s]
+elif args.command == CMD_COMMIT: rargs = args.d
+else: rargs = vars(args)
+request = ipc_request(ipc_client_path, args.command, rargs)
+
+# send ipc request
+debug(f'sending ipc request: {request}')
 try:
-    # register signal handlers
-    signal.signal(SIG_USERNAME, type_value)
-    signal.signal(SIG_PASSWORD, type_value)
-    signal.signal(signal.SIGALRM, timed_out)
+    with open(ipc_server_path, 'w') as f:
+        json.dump(request, f, indent=4)
+except FileNotFoundError:
+    err(f'no named pipe "{ipc_server_path}".  '
+             f'forgot `{cmdname} {CMD_START}`?')
+    sys.exit(1)
 
-    # create a pid file for ipc via signals
-    pidd = {
-        KEY_PID : os.getpid(),
-        KEY_TIME: time.monotonic(),
-    }
-    os.makedirs(PID, exist_ok=True)
-    pidf = tempfile.NamedTemporaryFile(mode='w', dir=PID)
-    json.dump(pidd, pidf)
-    pidf.flush()
-
-    if args.v:
-        sys.stdout.write(
-         f"nsapass v{VERSION}  copyright (C) 2020  caveman\n"
-         "https://github.com/Al-Caveman/nsapass\n\n"
-         "this program comes with ABSOLUTELY NO WARRANTY; for details\n"
-         "read https://github.com/Al-Caveman/nsapass/blob/master/LICENSE\n"
-        )
-        sys.exit()
-
-    if args.command is None:
-        parser.print_help()
-        sys.exit()
-
-    if args.command in {'get', 'cat'}:
-        path = args.d if args.d else DB
-        db, _ = load(path, args.s, nonempty=True)
-        tags = picktags(db, args.tags)
-        rev = pickrev(db, tags, args.r)
-        printinfo('entry to load:')
-        printentry(db, tags, showpass=args.z)
-        if args.command == 'cat':
-            if db[tags][rev][KEY_DATAB64] is not None:
-                value = db[tags][rev][KEY_DATAB64]
-                sys.stdout.buffer.write(base64.b64decode(value))
-            else:
-                printwarn(f'field {KEY_DATAB64} is empty')
-        else:
-            cmdname = os.path.basename(sys.argv[0])
-            if db[tags][rev][KEY_USERNAME] is not None:
-                retrieved_username = db[tags][rev][KEY_USERNAME]
-                printinfo(
-                    f'type username by `{cmdname} {CMD_TYPE_USERNAME}`')
-            if db[tags][rev][KEY_PASS] is not None:
-                retrieved_password = db[tags][rev][KEY_PASS]
-                printinfo(
-                    f'type password by `{cmdname} {CMD_TYPE_PASSWORD}`')
-            printinfo('waiting for commands...')
-            while True:
-                signal.pause()
-
-    elif args.command == 'add':
-        tags = newtags(args.tags, required=True)
-        password, datab64s = newpass(args.g, args.m, args.s, args.f,
-            args.z, required=True)
-        path = args.d if args.d else DB
-        lock(path)
-        db, dbpass = load(path, args.s)
-        add(db, tags, args.u, password, datab64s, args.n)
-        printinfo('added entry:')
-        printentry(db, tags, showpass=args.z)
-        save(db, dbpass, args.s, path)
-
-    elif args.command == 'del':
-        path = args.d if args.d else DB
-        lock(path)
-        db, dbpass = load(path, args.s, nonempty=True)
-        options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
-        tags_list = search(args.tags, options=options)
-        if len(tags_list) == 0:
-            exit('nothing to delete')
-        printwarn('entries to delete:')
-        for tags in tags_list:
-            printentry(db, tags, showpass=args.z)
-            delete(db, tags)
-        save(db, dbpass, args.s, path)
-
-    elif args.command == 'undel':
-        path = args.d if args.d else DB
-        lock(path)
-        db, dbpass = load(path, args.s, nonempty=True)
-        options = [tags for tags in db if db[tags][0][KEY_ARC] == True]
-        tags_list = search(args.tags, options=options)
-        if len(tags_list) == 0:
-            exit('nothing to undelete')
-        printinfo('entries to undelete:')
-        for tags in tags_list:
-            printentry(db, tags, showpass=args.z)
-            undelete(db, tags)
-        save(db, dbpass, args.s, path)
-
-    elif args.command == 'mod':
-        new_tags = newtags(args.t)
-        password, datab64s = newpass(args.g, args.m, args.s, args.f,
-            args.z)
-        if {new_tags, args.u, password, datab64s, args.n} == {None}:
-            exit('no changes requested')
-        path = args.d if args.d else DB
-        lock(path)
-        db, dbpass = load(path, args.s, nonempty=True)
-        cur_tags = picktags(db, args.tags, arc=args.a)
-        printinfo('entry to modify:')
-        printentry(db, cur_tags, showpass=args.z)
-        modify(db, cur_tags, new_tags, args.u, password, datab64s, args.n)
-        printinfo('entry after modification:')
-        if new_tags is None:
-            new_tags = cur_tags
-        printentry(db, new_tags, showpass=args.z)
-        save(db, dbpass, args.s, path)
-
-    elif args.command == 'undo':
-        path = args.d if args.d else DB
-        lock(path)
-        db, dbpass = load(path, args.s, nonempty=True)
-        tags = picktags(db, args.tags, arc=args.a)
-        rev = pickrev(db, tags, args.r, required=True)
-        if rev == 0:
-            exit(f'revision {rev} is already latest')
-        printinfo('before undo:')
-        printentry(db, tags, showpass=args.z, showold=True)
-        new_tags = timetravel(db, tags, rev)
-        printinfo('after undo:')
-        printentry(db, new_tags, showpass=args.z, showold=True)
-        save(db, dbpass, args.s, path)
-
-    elif args.command == 'forget':
-        path = args.d if args.d else DB
-        lock(path)
-        db, dbpass = load(path, args.s, nonempty=True)
-        options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
-        tags_list = search(args.tags, options=options)
-        if args.r is None:
-            printinfo('no revision is given.  assuming 5...')
-            args.r = 5
-        forgotten = False
-        for tags in tags_list:
-            rev = pickrev(db, tags, args.r)
-            if rev < len(db[tags]) - 1:
-                printinfo('before forgetting:')
-                printentry(db, tags, showpass=args.z, showold=True)
-                forget(db, tags, rev)
-                printwarn('after forgetting:')
-                printentry(db, tags, showpass=args.z, showold=True)
-                sys.stderr.write('\n')
-                forgotten = True
-        if not forgotten:
-            exit('nothing to forget')
-        save(db, dbpass, args.s, path)
-
-    elif args.command == 'ls':
-        path = args.d if args.d else DB
-        db, _ = load(path, args.s, nonempty=True)
-        options = [tags for tags in db if db[tags][0][KEY_ARC] == args.a]
-        tags_list = search(args.tags, options=options)
-        printinfo('listing...')
-        for tags in tags_list:
-            printentry(db, tags, showpass=args.z, showold=args.o)
-
-    elif args.command == 'chpass':
-        path = args.d if args.d else DB
-        lock(path)
-        db, _ = load(path, args.s)
-        save(db, None, args.s, path)
-
-    elif args.command in {'stop', CMD_TYPE_USERNAME, CMD_TYPE_PASSWORD}:
-        jobs = {'stop' : []}
-        signals = {
-            'stop' : signal.SIGINT,
-            CMD_TYPE_USERNAME : SIG_USERNAME,
-            CMD_TYPE_PASSWORD : SIG_PASSWORD
-        }
-        for pid_file in os.listdir(PID):
-            pid_path = f'{PID}/{pid_file}'
-            with open(pid_path, 'r') as f:
-                try:
-                    pidd = json.load(f)
-                except json.JSONDecodeError:
-                    continue
-            pid = pidd[KEY_PID]
-            ptime = pidd[KEY_TIME]
-            if pid == os.getpid():
-                continue
-            if args.command == 'stop':
-                jobs['stop'].append([pid])
-                continue
-            if args.command in jobs:
-                if ptime > jobs[args.command][0][1]:
-                    jobs[args.command] = [[pid, ptime]]
-                continue
-            jobs[args.command] = [[pid, ptime]]
-        done = 0
-        for cmd in jobs:
-            for job in jobs[cmd]:
-                pid = job[0]
-                signum = signals[cmd]
-                printinfo(f'sending signal {signum} to process {pid}...')
-                try:
-                    os.kill(pid, signum)
-                except ProcessLookupError:
-                    printwarn(f'not found.  deleting pid file...')
-                    os.unlink(pid_path)
-                done += 1
-        if done == 0:
-            exit('no other nsapass process is running')
-
-    else:
-        exit(f'unknown command "{args.command}"')
-except KeyboardInterrupt:
-    printinfo('received interrupt.  exiting...')
-except EOFError:
-    exit('premature end of file')
+# processing server's ipc replies
+debug(f'waiting for ipc replies...')
+replies = load_json(ipc_client_path)
+debug(f'got replies: {replies}')
+for reply in replies:
+    reply_type = reply[KEY_IPC_REPLY_TYPE]
+    reply_data = reply[KEY_IPC_REPLY_DATA]
+    if reply_type == VAL_IPC_REPLY_TYPE_CMD:
+        for command in args.c:
+            if command not in DO_COMMANDS:
+                replies += ipc_err(f'undefined command "{command}"')
+            else: run(DO_COMMANDS[command], reply_data)
+        continue
+    fout = sys.stdout.write
+    if reply_type == VAL_IPC_REPLY_TYPE_DEBUG  : fout = debug
+    elif reply_type == VAL_IPC_REPLY_TYPE_INFO : fout = info
+    elif reply_type == VAL_IPC_REPLY_TYPE_WARN : fout = warn
+    elif reply_type == VAL_IPC_REPLY_TYPE_ERR  : fout = err
+    elif reply_type == VAL_IPC_REPLY_TYPE_ENTRY:
+        tags, entry, diff = reply_data
+        reply_data = frmtentry(tags, entry, args.z, diff)
+    fout(reply_data)

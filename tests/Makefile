@@ -1,100 +1,81 @@
-NSA=../nsa -s -d $(CUR)/db.ciphart
-CPH=ciphart
+IPC=./ipc_dir
 TRU=./truth
 CUR=./current
-PAS=echo -e "lol\nlol"
-NEWPAS=echo -e "rofl\nlol"
-CHN1PAS=echo -e "lol\nlmfao"
-CHN2PAS=echo -e "lmfao\nlol"
-STR=python ./striptimestamps.py
-DIF=diff --color=always -u
+DB=test_db.ciphart
+
+NSA       =../nsa -i $(IPC)
+NSA_CREATE=$(NSA) create -s -d $(CUR)/$(DB)
+NSA_START =$(NSA) start -s -d $(CUR)/$(DB) &
+NSA_STOP  =$(NSA) stop
+NSA_CHPASS=$(NSA) chpass -s
+NSA_ADD   =$(NSA) add -s
+NSA_DEL   =$(NSA) del
+NSA_MOD   =$(NSA) mod -s
+NSA_LS    =$(NSA) ls
+NSA_REVERT=$(NSA) revert
+NSA_COMMIT=$(NSA) commit
+
+PASS     =echo -e "lol"
+PASS2    =echo -e "lol\nlol"
+PASS_NEW =echo -e "rofl"
+PASS_NEW2=echo -e "rofl\nrofl"
+PASS_USR =echo -e "lel\nlel"
+
+DEC=ciphart -dks -i $(CUR)/$(DB)
+CLN=python ./striptimestamps.py
+DIFF=diff --color=always -u
+
+all: test
 
 .PHONY: test
-test: test-docs test-chpass test-cat test-forget-archived
-
-.PHONY: test-prepare
-test-prepare:
-	make clean
-	mkdir -p $(CUR)
-
-.PHONY: test-docs
-test-docs: test-prepare
+test: clean
+	# prepare tests
+	mkdir -p $(CUR) $(IPC)
+	# test docs
 	$(NSA) -h > $(CUR)/-h
 	$(NSA) -v > $(CUR)/-v
-	$(DIF) 	    $(CUR)/-h $(TRU)/-h
-	$(DIF) 	    $(CUR)/-v $(TRU)/-v
-
-.PHONY: test-add
-test-add: test-prepare
-	$(PAS) | $(NSA) add tag1 tag2 -m -n "test note"
-	$(PAS) | $(NSA) add tag3 -m
-	$(PAS) | $(NSA) add tag4 -f $(TRU)/data1.clr
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_add_stripped.json
-
-.PHONY: test-cat
-test-cat: test-add
-	$(PAS) | $(NSA) -s cat tag4 > $(CUR)/data1.clr
-	$(DIF) $(CUR)/data1.clr $(TRU)/data1.clr
-
-.PHONY: test-del
-test-del: test-add
-	$(PAS) | $(NSA) del tag1 tag2
-	$(PAS) | $(NSA) del tag3
-	$(PAS) | $(NSA) del tag4
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_del_stripped.json
-
-.PHONY: test-undel
-test-undel: test-del
-	$(PAS) | $(NSA) undel tag1 tag2
-	$(PAS) | $(NSA) undel tag3
-	$(PAS) | $(NSA) undel tag4
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_undel_stripped.json
-
-.PHONY: test-mod
-test-mod: test-undel
-	$(NEWPAS) | $(NSA) mod tag1 tag2 -t tagNEW1 -m -n "new pass"
-	$(PAS) | $(NSA) mod tag3 -u usernamelol
-	$(PAS) | $(NSA) mod tag4 -f $(TRU)/data2.clr -n "file updated!"
-	$(PAS) | $(NSA) -s cat tag4 > $(CUR)/data2.clr
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_mod_stripped.json
-	$(DIF) $(CUR)/data2.clr $(TRU)/data2.clr
-
-.PHONY: test-undo
-test-undo: test-mod
-	$(PAS) | $(NSA) undo tagNEW1 -r 1
-	$(PAS) | $(NSA) undo tag3 -r 2
-	$(PAS) | $(NSA) undo tag4 -r 3
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_undo_stripped.json
-
-.PHONY: test-forget
-test-forget: test-undo
-	$(PAS) | $(NSA) forget -r 0
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_forget_stripped.json
-
-.PHONY: test-forget-archived
-test-forget-archived: test-forget
-	$(PAS) | $(NSA) forget -a -r 0
-	$(PAS) | $(CPH) -dks -i $(CUR)/db.ciphart -o $(CUR)/db.json
-	$(STR) $(CUR)/db.json > $(CUR)/db_stripped.json
-	$(DIF) $(CUR)/db_stripped.json $(TRU)/db_forget-archived_stripped.json
-
-.PHONY: test-chpass
-test-chpass: test-prepare test-add
-	$(CHN1PAS) | $(NSA) chpass
-	$(CHN2PAS) | $(NSA) chpass
+	$(DIFF)     $(TRU)/-h $(CUR)/-h
+	$(DIFF)     $(TRU)/-v $(CUR)/-v
+	# test create
+	$(PASS2) | $(NSA_CREATE)
+	$(PASS) | $(DEC) > $(CUR)/$(DB).create.str
+	$(CLN) $(CUR)/$(DB).create.str > $(CUR)/$(DB).create.str.cln
+	$(DIFF) $(TRU)/$(DB).create.str.cln $(CUR)/$(DB).create.str.cln
+	# test start
+	$(PASS) | $(NSA_START)
+	# test add
+	$(NSA_ADD) -t tag1 tag2 -n "oy vey"
+	$(NSA_ADD) -t test asd dea s
+	$(NSA_ADD) -t test
+	$(PASS_USR) | $(NSA_ADD) -t asdfa lel -m
+	$(NSA_COMMIT)
+	$(PASS) | $(DEC) > $(CUR)/$(DB).add.str
+	$(CLN) $(CUR)/$(DB).add.str > $(CUR)/$(DB).add.str.cln
+	$(DIFF) $(TRU)/$(DB).add.str.cln $(CUR)/$(DB).add.str.cln
+	# test del
+	$(NSA_DEL) test
+	$(NSA_COMMIT)
+	$(PASS) | $(DEC) > $(CUR)/$(DB).del.str
+	$(CLN) $(CUR)/$(DB).del.str > $(CUR)/$(DB).del.str.cln
+	$(DIFF) $(TRU)/$(DB).del.str.cln $(CUR)/$(DB).del.str.cln
+	# test mod
+	$(NSA_MOD) t t -u barak -r https://mossad.gov.il
+	$(PASS_USR) | $(NSA_MOD) t t -m
+	$(NSA_COMMIT)
+	$(PASS) | $(DEC) > $(CUR)/$(DB).mod.str
+	$(CLN) $(CUR)/$(DB).mod.str > $(CUR)/$(DB).mod.str.cln
+	$(DIFF) $(TRU)/$(DB).mod.str.cln $(CUR)/$(DB).mod.str.cln
+	# test ls
+	$(NSA_LS)
+	# test chpass
+	$(PASS_NEW2) | $(NSA_CHPASS)
+	$(NSA_COMMIT)
+	$(NSA_STOP)
+	$(PASS_NEW) | $(NSA_START)
+	# test stop
+	$(NSA_STOP)
 
 .PHONY: clean
 clean:
-	rm -rf $(CUR)
+	# clean
+	rm -rf $(CUR) $(IPC)
