@@ -38,14 +38,20 @@ audit-able, lack critical features, or both.
 
       _nsapass_ does this neatly with the `-b BITS` argument.
 
-    - E.g. _pass_ uses the directory stricture offered by the file system
-      ro organise entries.  This requires too much typing to identify.
+    - E.g. _pass_ uses the directory structure offered by the file system
+      to organise its passwords.  This requires too much typing to
+      identify a given password.  E.g. suppose that a password entry is
+      stored in `path/to/foo/.../baz` and suppose that the entry is already
+      made unique by `path/.../baz`, you will still need to type
+      `path/to/foo/../baz` entirely.  Why not just type `path baz` and let
+      it figure out that you meant that?  No good reason.
 
-      _nsapass_ uses a smart tagging system that can
-      effectively achieve a heirarichal partitioning of entries, without
-      needing to type their names fully.  E.g. you may even skip tags in
-      the middle; something you cannot do with _pass_'s directory
-      structure.
+      _nsapass_ uses a smart tagging system that can effectively achieve
+      that heirarichal partitioning of entries, without needing to type
+      their names fully.  E.g. in the example above, you can retrieve that
+      entry by not only typing `path baz` (which is already great), but
+      even by simply typing `p b` if those partial tags make the full tags
+      unique already.
 
     - ...
 
