@@ -181,10 +181,17 @@ audit-able, lack critical features, or both.
    if the tags are unique enough, as _nsapass_ is smart to figure out
    what you meant).  I usually type this command using `rofi`, `dmenu`,
    etc, for maximum convenience.
-1. I go to my browser where _ProtonMail_'s login prompt is displaying,
-   and hit shortcut `$mod+comma`, which will paste the username for me.
-1. Press tab to move to the password field.
-1. Press `$mod+period` to paste the `256` entropy-bit password.
+1. For git:
+    1. I type, say, `git push`.
+    1. As I get prompted by a login prompt, I hit shortcut `$mod+g`, which
+       I have mapped to `nsa do -c suodnpodn` in my window manager, which
+       automatically copies and pastes the retrieved username and password
+       respectively.
+2. For other apps:
+    1. I go to my browser where _ProtonMail_'s login prompt is displaying,
+       and hit shortcut `$mod+comma`, which will paste the username for me.
+    1. Press tab to move to the password field.
+    1. Press `$mod+period` to paste the `256` entropy-bit password.
 
 # Dependencies
 
