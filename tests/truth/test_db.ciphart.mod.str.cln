@@ -2,14 +2,16 @@
     "tag1 tag2": {
         "username": "barak",
         "password": "lel",
-        "datab64s": null,
+        "datab64s": "AVRi7QPOIDF0FmxaxTBTjga33bY21iTavJQ7nyccemiRJpJko1iN/2NoTaLdXCqPG5FbgcA2fCOYZqFbhVogl+Xeub9sJ17IbGV8suMdyv36MZfq36Sqfeko1zcpEgsXd8m6cW0czniFZO1BvAjqafMGaGcWo5RooyW3c0rYzgpCJw+yFrjHadB/SEpaEE1jJq9T7lcYf1wbzTnc4Rn7hR4I5gBX31Mxv/lQilLagE76B16AW5hNjdECdCmen+vaWxm+MNNV+Lq/FE2t83BB8+8vOcd0y1LXB6KH7cBz7nFA7V5n8BzLwf7X/qWUOOhnpUMdTl1KTFFgwgvZzjw61ExOWyKR/TM0IVr7qCWW9+BdpYouv2FK7poTIMx5O88rYUnnLWKU7NykMkmX5kJVCzCpHehNOQAa9ihaq5KVJkf9Pq1xS5YejNVl9yJF9ut7T22UKMFToVitaT+//L6Jx15cug4vQIu2KpFtSJ2GW+b5xMyytWIj4dyrjWLJw4QcEwT1Vn8sOrL3mi6UZnQoIiWN3l+WVarswSzFKjyU/MdVkOPIUVv2ntUOorGw88MgkZyQ+GcHUbryFiEpb7Dvzc+Zb+GigfPcnHAcXJh5FWQNvINROftIcr/2c1XGqGq9MQN0miH179g5SgxZe/uBwWKqsL+cngE6NH0AtYXfOEvyT9PsB8070E1aJf0hBH5jRlnv1svJV6fX4N78aNz+1NXfNP4rq59B3qbqFB8i3yL/PPk8Z6dPpRn28H7P06QOEkM5ON12Nts+Yo49QrFkmnzSw1rrqlQSCUF9qA5T/W7m68gogVYLjfrERvm9MMso90iIkLscDPF7hrpaPJZUMfRRqUzmtz8zff0HOcQPq5TA/1amfPwLzChwTrBJQo/Qb1BaSHjEqPk2TZi9MoRBjhAuSoE2xSuY9q58jMeBsEGyp0Bm1g03l3kmc8SP4WUQJIqCNkSgKr+fMJ/D00euXeT/Cn029IMGGFbbf3PkPkjjA7icqh5mHtqyEnwNtq7ud1mzFHtbs81Vvx4HAaYvu92sm44Tq2eat8kAjJcP3VaN2Dx3QEHsIUjZCMWaUhm2Y04Q5rpyNn0G5nhsiTlKSqp8j2VKgBLPEgo0zTkH6mgTL4Qz5rZFebEIlj/4TZzxPyz/aWw0M50fIAA+Zf+MaCUNSrJd7xkrujn2vg2s+9q9K6wbL1Cplfc6GHQEj2AcViiFxWWxRr2ZmVbfLQa4bDLZpFq7jEEUd9Doa+/eweey9EwI/gYAR6SdSe/BpiZEbUNPqkZts3/E9AQgTlSlV1YetnovsgcoyRpmSoVh7OkKBG/uvOOFBrB5Qs+utFerf6bbvgnVde6Nv/hXawPv/Q==",
+        "digest": "8c2b82f0d28afad29d48a2565cf866f34af65f32d2178c369e77d747",
         "uri": "https://mossad.gov.il",
         "note": "oy vey"
     },
     "test asd dea s": {
         "username": null,
         "password": null,
-        "datab64s": null,
+        "datab64s": "AVRi7QPOIDF0FmxaxTBTjga33bY21iTavJQ7nyccemiRJpJko1iN/2NoTaLdXCqPG5FbgcA2fCOYZqFbhVogl+Xeub9sJ17IbGV8suMdyv36MZfq36Sqfeko1zcpEgsXd8m6cW0czniFZO1BvAjqafMGaGcWo5RooyW3c0rYzgpCJw+yFrjHadB/SEpaEE1jJq9T7lcYf1wbzTnc4Rn7hR4I5gBX31Mxv/lQilLagE76B16AW5hNjdECdCmen+vaWxm+MNNV+Lq/FE2t83BB8+8vOcd0y1LXB6KH7cBz7nFA7V5n8BzLwf7X/qWUOOhnpUMdTl1KTFFgwgvZzjw61ExOWyKR/TM0IVr7qCWW9+BdpYouv2FK7poTIMx5O88rYUnnLWKU7NykMkmX5kJVCzCpHehNOQAa9ihaq5KVJkf9Pq1xS5YejNVl9yJF9ut7T22UKMFToVitaT+//L6Jx15cug4vQIu2KpFtSJ2GW+b5xMyytWIj4dyrjWLJw4QcEwT1Vn8sOrL3mi6UZnQoIiWN3l+WVarswSzFKjyU/MdVkOPIUVv2ntUOorGw88MgkZyQ+GcHUbryFiEpb7Dvzc+Zb+GigfPcnHAcXJh5FWQNvINROftIcr/2c1XGqGq9MQN0miH179g5SgxZe/uBwWKqsL+cngE6NH0AtYXfOEvyT9PsB8070E1aJf0hBH5jRlnv1svJV6fX4N78aNz+1NXfNP4rq59B3qbqFB8i3yL/PPk8Z6dPpRn28H7P06QOEkM5ON12Nts+Yo49QrFkmnzSw1rrqlQSCUF9qA5T/W7m68gogVYLjfrERvm9MMso90iIkLscDPF7hrpaPJZUMfRRqUzmtz8zff0HOcQPq5TA/1amfPwLzChwTrBJQo/Qb1BaSHjEqPk2TZi9MoRBjhAuSoE2xSuY9q58jMeBsEGyp0Bm1g03l3kmc8SP4WUQJIqCNkSgKr+fMJ/D00euXeT/Cn029IMGGFbbf3PkPkjjA7icqh5mHtqyEnwNtq7ud1mzFHtbs81Vvx4HAaYvu92sm44Tq2eat8kAjJcP3VaN2Dx3QEHsIUjZCMWaUhm2Y04Q5rpyNn0G5nhsiTlKSqp8j2VKgBLPEgo0zTkH6mgTL4Qz5rZFebEIlj/4TZzxPyz/aWw0M50fIAA+Zf+MaCUNSrJd7xkrujn2vg2s+9q9K6wbL1Cplfc6GHQEj2AcViiFxWWxRr2ZmVbfLQa4bDLZpFq7jEEUd9Doa+/eweey9EwI/gYAR6SdSe/BpiZEbUNPqkZts3/E9AQgTlSlV1YetnovsgcoyRpmSoVh7OkKBG/uvOOFBrB5Qs+utFerf6bbvgnVde6Nv/hXawPv/Q==",
+        "digest": "8c2b82f0d28afad29d48a2565cf866f34af65f32d2178c369e77d747",
         "uri": null,
         "note": null
     },
@@ -17,6 +19,7 @@
         "username": null,
         "password": "lel",
         "datab64s": null,
+        "digest": null,
         "uri": null,
         "note": null
     }

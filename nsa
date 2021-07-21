@@ -32,6 +32,7 @@ import atexit
 import getpass
 import base64
 import signal
+import fcntl
 
 #######################################
 #                             __      #
@@ -39,14 +40,11 @@ import signal
 #                            ( ._> /  #
 #######################################
 
-# encoding
-ENCODING = 'utf-8'
-
-# default terminal width when auto-detection fails
-TERMWIDTH = 80
-
 # location of ipc's named pipes
 IPC_DIR = '/tmp/nsapass'
+
+# encoding of strings
+ENCODING = 'utf-8'
 
 # location of encrypted passwords db
 DATABASE_PATH = os.path.expanduser('~/.local/share/nsapass/db.ciphart')
@@ -71,7 +69,6 @@ SESSION_TIMEOUT = 30
 
 # encrypt command
 ENCRYPT_COMMAND = {
-    'DELAY'         : 0,
     'COMMAND'       : 'ciphart -eszk -o {DATABASE_PATH}',
     'STDIN'         : '{DATABASE_PASSWORD}\n{DATABASE_DATA}',
     'TAKE_STDERR'   : True,
@@ -98,7 +95,6 @@ DECRYPT_COMMAND['STDIN'] = '{DATABASE_PASSWORD}'
 # letter.  below is an example of defining commands to copy and paste
 # various fields from the database.
 template_command = {
-    'DELAY'         : 0,
     'COMMAND'       : 'xclip -selection clipboard',
     'STDIN'         : '',
     'TAKE_STDERR'   : False,
@@ -107,7 +103,8 @@ template_command = {
 DO_COMMANDS = {c:dict(template_command) for c in 'upkrdon'}
 DO_COMMANDS['u']['STDIN'] = '{USERNAME}'
 DO_COMMANDS['p']['STDIN'] = '{PASSWORD}'
-DO_COMMANDS['k']['STDIN'] = '{KEYFILE}'
+DO_COMMANDS['k']['COMMAND'] = 'cat'
+DO_COMMANDS['k']['STDIN']   = '{KEYFILE}'
 DO_COMMANDS['r']['STDIN'] = '{URI}'
 DO_COMMANDS['d']['STDIN'] = '--deleted by nsapass--'
 DO_COMMANDS['o']['COMMAND'] = 'xdotool key Control+V'
@@ -115,19 +112,20 @@ DO_COMMANDS['n']['COMMAND'] = 'xdotool key Return'
 
 # theme
 COLOURS = {'RED'    : '\33[0;31m', 'BRED'   : '\33[1;31m',
-           'YELLOW' : '\33[0;33m', 'BGREEN' : '\33[1;32m',
-           'BLUE'   : '\33[0;34m', 'GRAY'   : '\33[0;90m',
-           'MAGENTA': '\33[0;35m', 'RESET'  : '\33[0m'}
+           'BGRED'  : '\33[0;41m','YELLOW' : '\33[0;33m',
+           'BGREEN' : '\33[1;32m', 'BLUE'   : '\33[0;34m',
+           'GRAY'   : '\33[0;90m', 'MAGENTA': '\33[0;35m',
+           'RESET'  : '\33[0m'}
 FORMAT = {
     'DEBUG'     : '{MAGENTA}[debug]{RESET} {}\n',
-    'INFO'      : '{}\n',
+    'INFO'      : '{BGREEN}*{RESET} {}\n',
     'WARN'      : '{YELLOW}[warning]{RESET} {}\n',
     'ERROR'     : '{RED}[error]{RESET} {}\n',
     'QUESTION'  : '{BLUE}< {}{RESET} ',
     'TAGS'      : '{BGREEN}{}{RESET}',
     'USERNAME'  : '{YELLOW}[{}{YELLOW}]{RESET}',
-    'PASSWORD'  : '{RED}[{}{RED}]{RESET}',
-    'KEYFILE'   : '{RED}[{:.10}{RED}]{RESET}',
+    'PASSWORD'  : '{RED}[{BGRED}{}{RED}]{RESET}',
+    'DIGEST'    : '{RED}[{:.10}{RED}]{RESET}',
     'TIME'      : '{BLUE}{}{RESET}',
     'URI'       : '{MAGENTA}[{}{MAGENTA}]{RESET}',
     'NOTE'      : '{GRAY}[{}]{RESET}',
@@ -136,7 +134,7 @@ FORMAT = {
     'ADD'       : '{BGREEN}+ {RESET}',
     'DEL'       : '{BRED}- {RESET}',
     'LIST'      : '{DIFF}{TIME} {TAGS} {USERNAME} {PASSWORD} ' \
-                  '{KEYFILE} {URI} {NOTE}\n'}
+                  '{DIGEST} {URI} {NOTE}\n'}
 
 #########################################
 #                                       #
@@ -144,7 +142,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '5.0.0'
+VERSION = '6'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -180,12 +178,13 @@ ARG_DEBUG       = 'V'
 ARG_NOCOLOUR    = 'C'
 ARG_IPC_DIR     = 'i'
 
-KEY_DB_USERNAME = 'username'
-KEY_DB_PASS     = 'password'
-KEY_DB_DATAB64  = 'datab64s'
-KEY_DB_URI      = 'uri'
-KEY_DB_NOTE     = 'note'
-KEY_DB_TIME     = 'timestamp'
+KEY_DB_USERNAME     = 'username'
+KEY_DB_PASS         = 'password'
+KEY_DB_DATAB64      = 'datab64s'
+KEY_DB_DIGEST       = 'digest'
+KEY_DB_URI          = 'uri'
+KEY_DB_NOTE         = 'note'
+KEY_DB_TIME         = 'timestamp'
 
 KEY_IPC_SESSION     = 'session'
 KEY_IPC_CMD         = 'command'
@@ -214,7 +213,7 @@ def frmtentry(tags, entry, showpass, diff=None):
     """formats a database entry"""
     username = frmtstr(entry[KEY_DB_USERNAME], 'USERNAME')
     password = frmtstr(entry[KEY_DB_PASS], 'PASSWORD', showpass)
-    digest = frmtstr(entry[KEY_DB_DATAB64], 'KEYFILE')
+    digest = frmtstr(entry[KEY_DB_DIGEST], 'DIGEST')
     uri = frmtstr(entry[KEY_DB_URI], 'URI')
     note = frmtstr(entry[KEY_DB_NOTE], 'NOTE')
     timestamp = frmtstr(time.ctime(entry[KEY_DB_TIME]), 'TIME')
@@ -222,7 +221,7 @@ def frmtentry(tags, entry, showpass, diff=None):
               'TAGS'    : frmtstr(tags, 'TAGS'),
               'USERNAME': username,
               'PASSWORD': password,
-              'KEYFILE' : digest,
+              'DIGEST'  : digest,
               'URI'     : uri,
               'NOTE'    : note,
               'TIME'    : timestamp}
@@ -317,51 +316,47 @@ def genpass(bits, length, letters):
     password = ''.join(secrets.choice(letters) for i in range(0, length))
     return password
 
-def readdata(path):
-    """read binary data from stdin"""
-    info(f'reading binary data from "{path}"...')
-    if path == '-': f = sys.stdin.buffer
-    else:
-        try: f = open(path, 'rb')
-        except FileNotFoundError:
+def bin2str(data):
+    """encode binary data into a string"""
+    return base64.b64encode(data).decode()
+
+def str2bin(s):
+    """decode binary data from a string"""
+    return base64.b64decode(s) if s else None
+
+def readbin(path):
+    """read binary data"""
+    debug(f'reading binary data from "{path}"...')
+    try:
+        with open(path, 'rb') as f:
+            debug(f'shared-locking "{path}"...')
+            fcntl.lockf(f, fcntl.LOCK_SH)
+            data = f.read()
+    except FileNotFoundError:
+        if path != '-':
             err(f'file "{path}" not found')
             sys.exit(1)
-    data = f.read()
-    if data: return base64.b64encode(data).decode()
-    err(f'no data read from "{path}"')
-    sys.exit(1)
+        data = sys.stdin.buffer.read()
+    return data
 
 def run(command, values):
     """run an external command"""
-    time.sleep(command['DELAY'])
-    p = subprocess.Popen(
-            command['COMMAND'].format(**values),
+    p = subprocess.Popen(command['COMMAND'].format(**values),
             stdin   = subprocess.PIPE if command['STDIN'] else None,
             stdout  = subprocess.PIPE if command['TAKE_STDOUT'] else None,
             stderr  = subprocess.PIPE if command['TAKE_STDERR'] else None,
-            shell   = True,
-            encoding=ENCODING)
-    p_stdout, _ = p.communicate(input=command['STDIN'].format(**values))
+            shell   = True)
+    stdin_parts = [part.format(**values).encode(ENCODING)
+        for part in command['STDIN'].split('{KEYFILE}')]
+    glue = values['KEYFILE'] if len(stdin_parts) > 1 else b''
+    stdin = glue.join(stdin_parts)
+    p_stdout, _ = p.communicate(input=stdin)
     r = p.returncode if p.returncode in command['RETURN_VALUES'] else '*'
     return p_stdout, command['RETURN_VALUES'][r]
 
-def lock(path):
-    """lock path"""
-    debug(f'locking "{path}"...')
-    lockpath = path + '.lock'
-    dirname = os.path.dirname(lockpath)
-    if len(dirname):
-        os.makedirs(dirname, exist_ok=True)
-    try:
-        open(lockpath, 'xb').close()
-    except FileExistsError:
-        err(f'lock file "{lockpath}" exists.  delete it if not used')
-        sys.exit(1)
-    atexit.register(os.unlink, lockpath)
-    atexit.register(debug, f'unlocking "{path}"...')
-
 def load_json(path):
     """loads a json file"""
+    debug(f'loading json file "{path}"...')
     if not os.path.exists(path):
         err(f'could not find file "{path}"')
         sys.exit(1)
@@ -386,13 +381,13 @@ def load_db(path, stdin):
         sys.exit(1)
     try:
         db = json.loads(data)
-        # temporary code for migration from pre v5.0.0 db format
         # TODO: remove this eventually
         for tags in db:
-            if type(db[tags]) is list:
-                entry = db[tags][0]
-                db[tags] = entry
-            if KEY_DB_URI not in db[tags]: db[tags][KEY_DB_URI] = None
+            # migration from pre v6 db format
+            if KEY_DB_DIGEST not in db[tags]:
+                data = str2bin(db[tags][KEY_DB_DATAB64])
+                digest = hashlib.sha224(data).hexdigest() if data else None
+                db[tags][KEY_DB_DIGEST] = digest
         return db, password
     except json.JSONDecodeError:
         err(f'error decoding database "{path}"')
@@ -403,11 +398,9 @@ def save_db(db, path, password):
     debug(f'saving database "{path}"...')
     path_tmp = path + '.temp'
     data = json.dumps(db, indent=4)
-    values = {
-        'DATABASE_PATH'     : path_tmp,
-        'DATABASE_PASSWORD' : password,
-        'DATABASE_DATA'     : data
-    }
+    values = {'DATABASE_PATH'     : path_tmp,
+              'DATABASE_PASSWORD' : password,
+              'DATABASE_DATA'     : data}
     _, err_msg = run(ENCRYPT_COMMAND, values)
     if err_msg:
         os.unlink(path_tmp)
@@ -452,9 +445,7 @@ def ipc_command(values): return ipc_reply(VAL_IPC_REPLY_TYPE_CMD, values)
 def ipc_entry(db, tags, showpass, diff=None):
     entry = dict(db[tags])
     if entry[KEY_DB_PASS] and not showpass: entry[KEY_DB_PASS] = '****'
-    if entry[KEY_DB_DATAB64]:
-        datab64 = entry[KEY_DB_DATAB64].encode()
-        entry[KEY_DB_DATAB64] = hashlib.sha3_224(datab64).hexdigest()
+    del entry[KEY_DB_DATAB64]
     return ipc_reply(VAL_IPC_REPLY_TYPE_ENTRY, (tags, entry, diff))
 
 def ipc_do(db, last_query, rargs):
@@ -463,18 +454,13 @@ def ipc_do(db, last_query, rargs):
     if not query: query = last_query
     tags_list = find(db, query)
     if not tags_list: return ipc_err('nothing matched')
-    replies = []
-    for tags in tags_list:
-        replies += ipc_command({
-            'USERNAME'  : db[tags][KEY_DB_USERNAME],
-            'PASSWORD'  : db[tags][KEY_DB_PASS],
-            'KEYFILE'   : db[tags][KEY_DB_DATAB64],
-            'URI'       : db[tags][KEY_DB_URI]})
-    return replies
+    if len(tags_list) > 1: return ipc_err('too many matched')
+    tags = tags_list[0]
+    return ipc_command(db[tags])
 
 def ipc_add(db, rargs):
     """implements `add` sub-command"""
-    args, password, datab64s = rargs
+    args, password, datab64s, digest = rargs
     tags, username, uri, note, showpass = (args[k] for k in
         (ARG_TAGS, ARG_USERNAME, ARG_URI, ARG_NOTE, ARG_SHOWPASS))
     tags = cleanwords(tags)
@@ -482,6 +468,7 @@ def ipc_add(db, rargs):
     db[tags] = {KEY_DB_USERNAME : username,
                 KEY_DB_PASS     : password,
                 KEY_DB_DATAB64  : datab64s,
+                KEY_DB_DIGEST   : digest,
                 KEY_DB_URI      : uri,
                 KEY_DB_NOTE     : note,
                 KEY_DB_TIME     : time.time()}
@@ -501,7 +488,7 @@ def ipc_del(db, rargs):
 
 def ipc_mod(db, rargs):
     """implements `mod` sub-command"""
-    args, password, datab64s = rargs
+    args, password, datab64s, digest = rargs
     query, tags, username, uri, note, showpass = (args[k] for k in
         (ARG_QUERY, ARG_TAGS, ARG_USERNAME, ARG_URI, ARG_NOTE,
         ARG_SHOWPASS))
@@ -516,7 +503,9 @@ def ipc_mod(db, rargs):
         entry[KEY_DB_TIME] = time.time()
         if username: entry[KEY_DB_USERNAME] = username
         if password: entry[KEY_DB_PASS] = password
-        if datab64s: entry[KEY_DB_DATAB64] = datab64s
+        if datab64s:
+            entry[KEY_DB_DATAB64] = datab64s
+            entry[KEY_DB_DIGEST] = digest
         if uri: entry[KEY_DB_URI] = uri
         if note: entry[KEY_DB_NOTE] = note
         if tags and tags != cur_tags:
@@ -621,7 +610,7 @@ allargs = {
                     'help':"a uniform resource identifier"},
     ARG_NOTE    : {'metavar':'NOTE', 'type':str, 'help':"a note"},
     ARG_COMMANDS: {'metavar':'COMMANDS', 'type':str, 'default':'',
-                    'help': f"""perform actions specified in COMMANDS in
+                    'help': f"""perform kctions specified in COMMANDS in
                     order from left to right.  COMMANDS can be a string
                     made of characters defined in DO_COMMANDS.  e.g. `nsa
                     do caveman protonmail -c uod` copies the username
@@ -670,7 +659,6 @@ ipc_server_path = f'{IPC_DIR}/server'
 if args.command == CMD_START:
     ipc_init(ipc_server_path)
     path = args.d if args.d else DATABASE_PATH
-    lock(path)
     db, password = load_db(path, args.s)
     db_orig = {tags:dict(db[tags]) for tags in db}
     password_orig = password
@@ -712,9 +700,13 @@ if args.command == CMD_START:
 
         # write replies back to client
         debug(f'writing to "{client_ipc_path}" ipc reply {replies}...')
-        if os.path.exists(client_ipc_path):
+        try:
             with open(client_ipc_path, 'w') as f:
+                debug(f'exclusive-locking "{client_ipc_path}"...')
+                fcntl.lockf(f, fcntl.LOCK_EX)
                 json.dump(replies, f)
+        except BrokenPipeError:
+            err("client's pipe is broken")
 
         # stop nsapass
         if rcmd == CMD_STOP:
@@ -727,7 +719,6 @@ if args.command == CMD_CREATE:
     if os.path.exists(path):
         err(f'database "{path}" already exists')
         sys.exit(1)
-    lock(path)
     password = askpass('new database', confirm=True, stdin=args.s)
     save_db({}, path, password)
     info(f'database created in "{path}"')
@@ -737,7 +728,7 @@ if args.command == CMD_CREATE:
 if args.command == CMD_CHPASS:
     new_db_pass = askpass('new database', confirm=True, stdin=args.s)
 elif args.command in {CMD_ADD, CMD_MOD}:
-    password, datab64s = None, None
+    password, datab64s, digest = None, None, None
     if args.p not in PASSWORD_SETS:
         err(f'set "{args.p}" is not among: {", ".join(PASSWORD_SETS)}')
         sys.exit(1)
@@ -745,7 +736,10 @@ elif args.command in {CMD_ADD, CMD_MOD}:
     if args.b or args.l:
         password = genpass(args.b, args.l, letters)
     if args.m: password = askpass('new entry', confirm=True, stdin=args.s)
-    if args.f: datab64s = readdata(args.f)
+    if args.f:
+        data = readbin(args.f)
+        datab64s = bin2str(data)
+        digest = hashlib.sha224(data).hexdigest()
 
 # terminate useless cases early on
 if args.command == CMD_ADD and not args.t:
@@ -756,12 +750,11 @@ if args.command == CMD_ADD and not args.t:
 if not os.path.exists(ipc_server_path):
     err(f'ipc path "{ipc_server_path}" not found.  nsapass started?')
     sys.exit(1)
-lock(ipc_server_path)
 ipc_client_path = f'{IPC_DIR}/client.{os.getpid()}'
 ipc_init(ipc_client_path)
 if args.command == CMD_CHPASS: rargs = new_db_pass
 elif args.command in {CMD_ADD, CMD_MOD}:
-    rargs = [vars(args), password, datab64s]
+    rargs = [vars(args), password, datab64s, digest]
 elif args.command == CMD_COMMIT: rargs = args.d
 else: rargs = vars(args)
 request = ipc_request(ipc_client_path, args.command, rargs)
@@ -770,11 +763,15 @@ request = ipc_request(ipc_client_path, args.command, rargs)
 debug(f'sending ipc request: {request}')
 try:
     with open(ipc_server_path, 'w') as f:
+        debug(f'exclusive-locking "{ipc_server_path}"...')
+        fcntl.lockf(f, fcntl.LOCK_EX)
         json.dump(request, f, indent=4)
 except FileNotFoundError:
     err(f'no named pipe "{ipc_server_path}".  '
              f'forgot `{cmdname} {CMD_START}`?')
     sys.exit(1)
+except BrokenPipeError:
+    err("server's pipe is broken")
 
 # processing server's ipc replies
 debug(f'waiting for ipc replies...')
@@ -784,10 +781,17 @@ for reply in replies:
     reply_type = reply[KEY_IPC_REPLY_TYPE]
     reply_data = reply[KEY_IPC_REPLY_DATA]
     if reply_type == VAL_IPC_REPLY_TYPE_CMD:
+        values = {'USERNAME': reply_data[KEY_DB_USERNAME],
+                  'PASSWORD': reply_data[KEY_DB_PASS],
+                  'KEYFILE' : str2bin(reply_data[KEY_DB_DATAB64]),
+                  'URI'     : reply_data[KEY_DB_URI]}
         for command in args.c:
             if command not in DO_COMMANDS:
-                replies += ipc_err(f'undefined command "{command}"')
-            else: run(DO_COMMANDS[command], reply_data)
+                err(f'undefined command "{command}"')
+                continue
+            stdout, err_msg = run(DO_COMMANDS[command], values)
+            if stdout: sys.stdout.write(stdout)
+            if err_msg: err(err_msg)
         continue
     fout = sys.stdout.write
     if reply_type == VAL_IPC_REPLY_TYPE_DEBUG  : fout = debug

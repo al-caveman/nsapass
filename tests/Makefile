@@ -11,13 +11,14 @@ NSA_CHPASS=$(NSA) chpass -s
 NSA_ADD   =$(NSA) add -s
 NSA_DEL   =$(NSA) del
 NSA_MOD   =$(NSA) mod -s
+NSA_DO    =$(NSA) do
 NSA_LS    =$(NSA) ls
 NSA_REVERT=$(NSA) revert
 NSA_COMMIT=$(NSA) commit
 
-PASS     =echo -e "lol"
+PASS     =echo    "lol"
 PASS2    =echo -e "lol\nlol"
-PASS_NEW =echo -e "rofl"
+PASS_NEW =echo    "rofl"
 PASS_NEW2=echo -e "rofl\nrofl"
 PASS_USR =echo -e "lel\nlel"
 
@@ -43,8 +44,9 @@ test: clean
 	$(DIFF) $(TRU)/$(DB).create.str.cln $(CUR)/$(DB).create.str.cln
 	# test start
 	$(PASS) | $(NSA_START)
+	sleep 5
 	# test add
-	$(NSA_ADD) -t tag1 tag2 -n "oy vey"
+	$(NSA_ADD) -t tag1 tag2 -n "oy vey" -f $(TRU)/keyfile
 	$(NSA_ADD) -t test asd dea s
 	$(NSA_ADD) -t test
 	$(PASS_USR) | $(NSA_ADD) -t asdfa lel -m
@@ -60,11 +62,17 @@ test: clean
 	$(DIFF) $(TRU)/$(DB).del.str.cln $(CUR)/$(DB).del.str.cln
 	# test mod
 	$(NSA_MOD) t t -u barak -r https://mossad.gov.il
+	$(NSA_MOD) t d -f $(TRU)/keyfile
 	$(PASS_USR) | $(NSA_MOD) t t -m
 	$(NSA_COMMIT)
 	$(PASS) | $(DEC) > $(CUR)/$(DB).mod.str
 	$(CLN) $(CUR)/$(DB).mod.str > $(CUR)/$(DB).mod.str.cln
 	$(DIFF) $(TRU)/$(DB).mod.str.cln $(CUR)/$(DB).mod.str.cln
+	# test do
+	$(NSA_DO) t t -c k > $(CUR)/keyfile-t_t
+	$(NSA_DO) t d -c k > $(CUR)/keyfile-t_d
+	$(DIFF) $(TRU)/keyfile $(CUR)/keyfile-t_t
+	$(DIFF) $(TRU)/keyfile $(CUR)/keyfile-t_d
 	# test ls
 	$(NSA_LS)
 	# test chpass
@@ -72,6 +80,7 @@ test: clean
 	$(NSA_COMMIT)
 	$(NSA_STOP)
 	$(PASS_NEW) | $(NSA_START)
+	sleep 5
 	# test stop
 	$(NSA_STOP)
 
