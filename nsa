@@ -383,6 +383,11 @@ def load_db(path, stdin):
         db = json.loads(data)
         # TODO: remove this eventually
         for tags in db:
+            # migration from pre v5.0.0 db format
+            if type(db[tags]) is list:
+                entry = db[tags][0]
+                db[tags] = entry
+            if KEY_DB_URI not in db[tags]: db[tags][KEY_DB_URI] = None
             # migration from pre v6 db format
             if KEY_DB_DIGEST not in db[tags]:
                 data = str2bin(db[tags][KEY_DB_DATAB64])
