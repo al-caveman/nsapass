@@ -3,9 +3,16 @@
 </p>
 
 # What is _nsapass_?
-Generally, it is the simplest, most usable, most secure, passwords manager.
-Because all other password managers are either too complex to be
+Generally, it is the simplest, most usable, most secure,
+[CLI](https://en.wikipedia.org/wiki/Command-line_interface) passwords
+manager.  Because all other password managers are either too complex to be
 audit-able, lack critical features, or both.
+
+<p align="center"><img src="pics/screenshot_init.png"></p>
+<p align="center"><strong>Fig 1.</strong> Initial setup.</p>
+    
+<p align="center"><img src="pics/screenshot_someuse.png"></p>
+<p align="center"><strong>Fig 2.</strong> Some use.</p>
 
 ## Quick comparison
 
@@ -118,14 +125,6 @@ audit-able, lack critical features, or both.
 - **Common sense:** Your passwords database never touches the disk in plain
   text form.  If you have disk swap memory, or cybernation, make sure
   they're encrypted (or disable them; who needs them these days?).
-
-- **Looks pretty:**
-
-<p align="center"><img src="pics/screenshot_init.png"></p>
-<p align="center"><strong>Fig 1.</strong> Initial setup.</p>
-    
-<p align="center"><img src="pics/screenshot_someuse.png"></p>
-<p align="center"><strong>Fig 2.</strong> Some use.</p>
 
 # Usage
 
