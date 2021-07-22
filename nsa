@@ -461,6 +461,7 @@ def ipc_do(db, last_query, rargs):
     if not tags_list: return ipc_err('nothing matched')
     if len(tags_list) > 1: return ipc_err('too many matched')
     tags = tags_list[0]
+    info(f'do {FORMAT["TAGS"].format(tags, **COLOURS)}')
     return ipc_command(db[tags])
 
 def ipc_add(db, rargs):
@@ -470,6 +471,7 @@ def ipc_add(db, rargs):
         (ARG_TAGS, ARG_USERNAME, ARG_URI, ARG_NOTE, ARG_SHOWPASS))
     tags = cleanwords(tags)
     if tags in db: return ipc_err(f'tags "{tags}" already exists')
+    info(f'add {FORMAT["TAGS"].format(tags, **COLOURS)}')
     db[tags] = {KEY_DB_USERNAME : username,
                 KEY_DB_PASS     : password,
                 KEY_DB_DATAB64  : datab64s,
@@ -487,6 +489,7 @@ def ipc_del(db, rargs):
         return ipc_err('nothing matched')
     replies = []
     for tags in tags_list:
+        info(f'del {FORMAT["TAGS"].format(tags, **COLOURS)}')
         replies += ipc_entry(db, tags, showpass, 'DEL')
         del db[tags]
     return replies
@@ -503,6 +506,7 @@ def ipc_mod(db, rargs):
         return ipc_err('nothing matched')
     replies = []
     for cur_tags in tags_list:
+        info(f'mod {FORMAT["TAGS"].format(cur_tags, **COLOURS)}')
         entry = db[cur_tags]
         replies += ipc_entry(db, cur_tags, showpass, 'DEL')
         entry[KEY_DB_TIME] = time.time()
@@ -523,6 +527,8 @@ def ipc_mod(db, rargs):
 def ipc_ls(db, rargs):
     """implements `ls` sub-command"""
     query, showpass = rargs[ARG_QUERY], rargs[ARG_SHOWPASS]
+    formatted_query = FORMAT['TAGS'].format(' '.join(query), **COLOURS)
+    info(f'ls {formatted_query}')
     tags_list = find(db, query)
     if not tags_list: return ipc_err('nothing matched')
     replies = []
@@ -532,6 +538,7 @@ def ipc_ls(db, rargs):
 
 def ipc_diff(db, db_orig, password, password_orig, rargs):
     """implements `diff` sub-command"""
+    info('diff')
     showpass = rargs[ARG_SHOWPASS]
     replies = []
     current_tags = set(db)
@@ -695,11 +702,13 @@ if args.command == CMD_START:
         elif rcmd == CMD_DIFF:  replies += ipc_diff(db, db_orig, password,
                                                     password_orig, rargs)
         elif rcmd == CMD_COMMIT:
+            info('commit')
             if rargs: path = rargs
             db_orig = dict(db)
             save_db(db, path, password)
             replies += ipc_info(f'database committed to "{path}"')
         elif rcmd == CMD_REVERT:
+            info('revert')
             db = dict(db_orig)
             replies += ipc_info('reverted working database to original')
 
@@ -715,7 +724,7 @@ if args.command == CMD_START:
 
         # stop nsapass
         if rcmd == CMD_STOP:
-            info(f'stopping nsapass...')
+            info(f'stop')
             sys.exit()
 
 # create nsapass passwords database
