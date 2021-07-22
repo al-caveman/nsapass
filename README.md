@@ -1,12 +1,8 @@
-<p align="center">
-    <img src="pics/comparision.png">
-</p>
-
-# What is _nsapass_?
-Generally, it is the simplest, most usable, most secure,
+# Synopsis
+_nsapass_ is the simplest, most usable and most secure
 [CLI](https://en.wikipedia.org/wiki/Command-line_interface) passwords
-manager.  Because all other password managers are either too complex to be
-audit-able, lack critical features, or both.
+manager for GNU/Linux.  Because all other password managers are either too
+complex to be audit-able, lack critical features, or both.
 
 <p align="center"><img src="pics/screenshot_init.png"></p>
 <p align="center"><strong>Fig 1.</strong> Initial setup.</p>
@@ -14,59 +10,7 @@ audit-able, lack critical features, or both.
 <p align="center"><img src="pics/screenshot_someuse.png"></p>
 <p align="center"><strong>Fig 2.</strong> Some use.</p>
 
-## Quick comparison
-
-- [_keepassxc_](https://github.com/keepassxreboot/keepassxc) has loads of
-  lines of codes that makes it effectively not audit-able, and it's CLI is
-  terrible.  So it loses on both of the auditability and usability
-  dimensions.
-- [_pass_](https://www.passwordstore.org/) has roughly about the same lines
-  of codes as _nsapass_, so it is sort of auditable, but it:
-  - Exposes each password entry as a file with a meaningful name (so that
-    the user remembers it).  The file names are obviously in plain text in
-    the file system.  If file names are relevant to passwords inside them,
-    then it leaks information should the disk be stolen.  If the file names
-    are not relevant, then it becomes not usable as you'll need to remember
-    odd names unrelated to passwords within them.
-
-    _nsapass_ doesn't leak any information about the
-    entries, as the whole database is stored in a single encrypted file.
-    You will be free to choose the most memorable method to tag your entry,
-    without conerns of leaking it in plain text in the file system.
-
-  - Is limited to `gpg` for file encryption and decryption, a bloated tool.
-
-    _nsapass_ allows you to use any other file encryption and decryption
-    tool.
-
-  - Lots of limitations:
-    - E.g. _pass_'s password generation isn't able to generate desired
-      passwords based on target entropy bits (at least not out of the box).
-
-      _nsapass_ does this neatly with the `-b BITS` argument.
-
-    - E.g. _pass_ uses the directory structure offered by the file system
-      to organise its passwords.  This requires too much typing to
-      identify a given password.  E.g. suppose that a password entry is
-      stored in `path/to/foo/.../baz` and suppose that the entry is already
-      made unique by `path/.../baz`, you will still need to type
-      `path/to/foo/../baz` entirely.  Why not just type `path baz` and let
-      it figure out that you meant that?  No good reason.
-
-      _nsapass_ uses a smart tagging system that can effectively achieve
-      that heirarichal partitioning of entries, without needing to type
-      their names fully.  E.g. in the example above, you can retrieve that
-      entry by not only typing `path baz` (which is already great), but
-      even by simply typing `p b` if those partial tags make the full tags
-      unique already.
-
-    - ...
-
-  So, when considering the limited features of _pass_ compared to those of
-  _nsapass_, _pass_ rather feels very bloated; _nsapass_ does much more
-  with about the same size of about `800` lines of code.
-
-## A closer look
+## Features
 
 - **No funny memory bugs:** Thanks implementing _nsapass_
   entirely in Python, we easily win this by simply taking advantage of the
@@ -126,6 +70,58 @@ audit-able, lack critical features, or both.
   text form.  If you have disk swap memory, or cybernation, make sure
   they're encrypted (or disable them; who needs them these days?).
 
+## A comparison
+
+- [_keepassxc_](https://github.com/keepassxreboot/keepassxc) has loads of
+  lines of codes that makes it effectively not audit-able, and it's CLI is
+  terrible.  So it loses on both of the auditability and usability
+  dimensions.
+- [_pass_](https://www.passwordstore.org/) has roughly about the same lines
+  of codes as _nsapass_, so it is sort of auditable, but it:
+  - Exposes each password entry as a file with a meaningful name (so that
+    the user remembers it).  The file names are obviously in plain text in
+    the file system.  If file names are relevant to passwords inside them,
+    then it leaks information should the disk be stolen.  If the file names
+    are not relevant, then it becomes not usable as you'll need to remember
+    odd names unrelated to passwords within them.
+
+    _nsapass_ doesn't leak any information about the
+    entries, as the whole database is stored in a single encrypted file.
+    You will be free to choose the most memorable method to tag your entry,
+    without conerns of leaking it in plain text in the file system.
+
+  - Is limited to `gpg` for file encryption and decryption, a bloated tool.
+
+    _nsapass_ allows you to use any other file encryption and decryption
+    tool.
+
+  - Lots of limitations:
+    - E.g. _pass_'s password generation isn't able to generate desired
+      passwords based on target entropy bits (at least not out of the box).
+
+      _nsapass_ does this neatly with the `-b BITS` argument.
+
+    - E.g. _pass_ uses the directory structure offered by the file system
+      to organise its passwords.  This requires too much typing to
+      identify a given password.  E.g. suppose that a password entry is
+      stored in `path/to/foo/.../baz` and suppose that the entry is already
+      made unique by `path/.../baz`, you will still need to type
+      `path/to/foo/../baz` entirely.  Why not just type `path baz` and let
+      it figure out that you meant that?  No good reason.
+
+      _nsapass_ uses a smart tagging system that can effectively achieve
+      that heirarichal partitioning of entries, without needing to type
+      their names fully.  E.g. in the example above, you can retrieve that
+      entry by not only typing `path baz` (which is already great), but
+      even by simply typing `p b` if those partial tags make the full tags
+      unique already.
+
+    - ...
+
+  So, when considering the limited features of _pass_ compared to those of
+  _nsapass_, _pass_ rather feels very bloated; _nsapass_ does much more
+  with about the same size of about `800` lines of code.
+
 # Usage
 
 ## Installation
@@ -133,64 +129,71 @@ audit-able, lack critical features, or both.
 1. **Optional:** Edit file `nsa` to apply your configurations.
 1. Paste the file `nsa` in wherever you'd like it to be.  Perhaps somewhere
    in `PATH`.
-1. **Optional:** For convenient pasting of username and passwords, perhaps
-   add some shortcuts to your window manager.  These are shortcuts that I
-   use for my `i3`:
 
-   ```
-   bindsym $mod+i exec nsa stop
-   bindsym --release $mod+comma exec nsa do -c uod
-   bindsym --release $mod+period exec nsa do -c pod
-   ```
-
-   The command `nsa do -c uod` is an automation that loads the username into
-   the clipboard (`u`), pastes it by emulating `Control+V` (`o`), then deletes
-   the password from clipboard (`d`).  The other command `nsa do -c uod` does
-   the same except for the password.
-
-   You can add your own other commands against those fields, as well as others
-   such as URI and stored binary key files.
-
-## How I use _nsapass_
+## Usage example
 
 ### Database creation and housekeeping
 1. `nsa create` to create an empty database.  This is done only once.
-1. `nsa start` and type my high-entropy password to let _nsapass_'s backend
-   run in some window terminal, and keep it running there.
-1. Suppose that I'd like to add a new password entry for my _ProtonMail_
-   account, I open a new terminal and do:
+1. `nsa start` will load the nsapass server.
+1. In a separate terminal, use commands `nsa (ls | add | del | mod | diff |
+   commit | revert)` to modify the passwords database.  Here is an example:
+   1. `nsa add -t caveman protonmail -b 256` will
+      add an automatically generated password worth `256` many Shannon's
+      entropy bits for my _ProtonMail_ account, using the default
+      characters space (`printable`), and associates it with the tags
+      `caveman protonmail` for convenient retrieval in the future.
+   1. `nsa diff` will view the total changes made so far to the passwords
+      database.
+   1. If changes are not fine, undo them by `nsa del caveman
+      protonmail`, or `nsa revert`.  The latter will reset the database to
+      latest committed version.
+   1. If changes are are good, then save them by `nsa commit`.  Saving them
+      is necessary to make the changes permanent.
+   1. When no longer in need of _nsapass_, execute `nsa stop` to stop the
+      server.
 
-   `nsa add -t caveman protonmail -b 256 -r https://protonmail.com`
+### An example of convenient use
 
-   This will create a password with `256`bits of entropy, from the default
-   set of printable characters (customisable; see `-p` and `-o`), and a
-   couple of tags `paveman protonmail` for later retrieval.
-1. To save this entry, I:
-    1. Inspect it by `nsa diff`.  If I'd like to actually see the password,
-       I add the `-z` flag, i.e. `nsa diff -z`.
-    2. `nsa commit`.
-1. If i'm unhappy about what I see in `nsa diff`, I can modify it by
-   `nsa mod ...` (see `nsa mod -h`), delete it by `nsa del c p` (see `nsa
-   del -h`), or delete all scheduled changes by `nsa revert` (see `nsa
-   revert -h`).
+I've added these shortcuts to my `i3` window manager:
+```
+bindsym           $mod+i       exec nsa do -c d
+bindsym --release $mod+comma   exec nsa do -c u
+bindsym --release $mod+period  exec nsa do -c p
+bindsym --release $mod+g       exec nsa do -c spodn
+bindsym --release $mod+shift+g exec nsa do -c suodnpodn
+```
 
-### Logging into things
+Suppose that I'd like use entries that associate with the tags `EXAMPLE TAGS`.
+I perform these in order:
 
-1. I retrieve it by `nsa do caveman protonmail` (or just `nsa do c p`
-   if the tags are unique enough, as _nsapass_ is smart to figure out
-   what you meant).  I usually type this command using `rofi`, `dmenu`,
-   etc, for maximum convenience.
-1. For git:
-    1. I type, say, `git push`.
-    1. As I get prompted by a login prompt, I hit shortcut `$mod+g`, which
-       I have mapped to `nsa do -c suodnpodn` in my window manager, which
-       automatically copies and pastes the retrieved username and password
-       respectively.
-2. For other apps:
-    1. I go to my browser where _ProtonMail_'s login prompt is displaying,
-       and hit shortcut `$mod+comma`, which will paste the username for me.
-    1. Press tab to move to the password field.
-    1. Press `$mod+period` to paste the `256` entropy-bit password.
+1. I start the _nsapass_ server in some terminal by `nsa start`, and let it
+   run there for as long as I want to access my passwords database.
+1. I execute `nsa do EXAMPLE TAGS` (or just `nsa do E` if partial tags
+   query `c p` uniquely identifies tags `EXAMPLE TAGS`) in order to load
+   the entry.
+1. Then I use the username, password or keyfile entries depending on the
+   way the application works.
+   - For general applications, I load username and password entries into
+     the clipboard by `$mod+comma` and `$mod+period`, respectively, then
+     paste them by `control+v`.  I finally delete them by `$mod+i`.
+   - For CLI applications that have a well defined order of prompts, such
+     as `git`, I use `$mod+shift+g` to have _nsapass_ automatically
+     copy-paste-delete username and password entries, successively, using a
+     single shortcut.
+   - For CLI applications that only need the password, such as `ssh
+     user@server`, I use `$mod+g` which only copy-pastes-deletes the
+     password.
+
+
+It should be also possible to (but I personally don't do it this way):
+
+- Make it even more convenient, by configuring shortcuts with GUI prompts,
+  that take advantage of the fact that steps `nsa do EXAMPLE TAGS` and,
+  say, `nsa do -c u` can be combined in a single step `nsa do EXAMPLE TAGS
+  -c u`.
+- Automate command execution.  E.g. command `z` could be defined in such a
+  way that `nsa do EXAMPLE TAGS -c szuodnpodn` would execute `nsa push`
+  and feed it with passwords as earlier.
 
 # Dependencies
 
