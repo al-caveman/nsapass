@@ -142,7 +142,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '6'
+VERSION = '6.1'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
