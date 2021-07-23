@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# nsapass - a simple password manager.
+# nsapass - the simplest, most usable and most secure passwords manager.
 # Copyright (C) 2021 caveman
 # https://github.com/al-caveman/nsapass
 #
@@ -25,6 +25,7 @@ import re
 import json
 import subprocess
 import time
+import datetime
 import math
 import secrets
 import hashlib
@@ -59,17 +60,9 @@ PASSWORD_SETS = {
 # default passwords set
 DEFAULT_SET = 'printable'
 
-# whether session authentication happens.
-SESSION_AUTH = False
-
-# maximum number of seconds approved sessions can idle before expiring.
-# setting it to 0 will immediately timeout, so that every session needs an
-# approval.
-SESSION_TIMEOUT = 30
-
 # encrypt command
 ENCRYPT_COMMAND = {
-    'COMMAND'       : 'ciphart -eszk -o {DATABASE_PATH}',
+    'COMMAND'       : ['ciphart', '-eszk', '-o', '{DATABASE_PATH}'],
     'STDIN'         : '{DATABASE_PASSWORD}\n{DATABASE_DATA}',
     'TAKE_STDERR'   : True,
     'TAKE_STDOUT'   : True,
@@ -88,29 +81,32 @@ ENCRYPT_COMMAND = {
 
 # decrypt command
 DECRYPT_COMMAND = dict(ENCRYPT_COMMAND)
-DECRYPT_COMMAND['COMMAND'] = 'ciphart -dsk -i {DATABASE_PATH}'
+DECRYPT_COMMAND['COMMAND'] = ['ciphart', '-dsk', '-i', '{DATABASE_PATH}']
 DECRYPT_COMMAND['STDIN'] = '{DATABASE_PASSWORD}'
 
 # commands used by `nsa do -c COMMANDS`.  each command must be a single
 # letter.  below is an example of defining commands to copy and paste
 # various fields from the database.
 template_command = {
-    'COMMAND'       : 'xclip -selection clipboard',
+    'COMMAND'       : ['xclip', '-selection', 'clipboard'],
     'STDIN'         : '',
     'TAKE_STDERR'   : False,
     'TAKE_STDOUT'   : False,
     'RETURN_VALUES' : {0:None, '*':'xclip error'}}
-DO_COMMANDS = {c:dict(template_command) for c in 'upkrdon'}
-DO_COMMANDS['u']['STDIN'] = '{USERNAME}'
-DO_COMMANDS['p']['STDIN'] = '{PASSWORD}'
-DO_COMMANDS['k']['COMMAND'] = 'cat'
-DO_COMMANDS['k']['STDIN']   = '{KEYFILE}'
-DO_COMMANDS['r']['STDIN'] = '{URI}'
-DO_COMMANDS['d']['STDIN'] = '--deleted by nsapass--'
-DO_COMMANDS['o']['COMMAND'] = 'xdotool key Control+V'
-DO_COMMANDS['n']['COMMAND'] = 'xdotool key Return'
+DO_COMMANDS = {c:dict(template_command) for c in ['copyuser', 'copypass',
+    'copyuri', 'delclip', 'paste', 'enter', 'keyfile', 'sleep']}
+DO_COMMANDS['copyuser']['STDIN'  ] = '{USERNAME}'
+DO_COMMANDS['copypass']['STDIN'  ] = '{PASSWORD}'
+DO_COMMANDS['copyuri' ]['STDIN'  ] = '{URI}'
+DO_COMMANDS['delclip' ]['STDIN'  ] = '--deleted by nsapass--'
+DO_COMMANDS['paste'   ]['COMMAND'] = ['xdotool', 'key', 'Control+V']
+DO_COMMANDS['enter'   ]['COMMAND'] = ['xdotool', 'key', 'Return']
+DO_COMMANDS['keyfile' ]['COMMAND'] = ['cat']
+DO_COMMANDS['keyfile' ]['STDIN'  ] = '{KEYFILE}'
+DO_COMMANDS['sleep'   ]['COMMAND'] = ['sleep',  '.1']
 
 # theme
+TIME = '%Y-%m-%d %H:%M'
 COLOURS = {'RED'    : '\33[0;31m', 'BRED'   : '\33[1;31m',
            'BGRED'  : '\33[0;41m','YELLOW' : '\33[0;33m',
            'BGREEN' : '\33[1;32m', 'BLUE'   : '\33[0;34m',
@@ -133,7 +129,7 @@ FORMAT = {
     'NONE'      : '',
     'ADD'       : '{BGREEN}+ {RESET}',
     'DEL'       : '{BRED}- {RESET}',
-    'LIST'      : '{DIFF}{TIME} {TAGS} {USERNAME} {PASSWORD} ' \
+    'LIST'      : '{DIFF}{TIME} {TAGS} {USERNAME} {PASSWORD} '
                   '{DIGEST} {URI} {NOTE}\n'}
 
 #########################################
@@ -142,7 +138,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '6.2'
+VERSION = '7'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -186,7 +182,6 @@ KEY_DB_URI          = 'uri'
 KEY_DB_NOTE         = 'note'
 KEY_DB_TIME         = 'timestamp'
 
-KEY_IPC_SESSION     = 'session'
 KEY_IPC_CMD         = 'command'
 KEY_IPC_ARGS        = 'arguments'
 KEY_IPC_PATH        = 'path'
@@ -216,7 +211,8 @@ def frmtentry(tags, entry, showpass, diff=None):
     digest = frmtstr(entry[KEY_DB_DIGEST], 'DIGEST')
     uri = frmtstr(entry[KEY_DB_URI], 'URI')
     note = frmtstr(entry[KEY_DB_NOTE], 'NOTE')
-    timestamp = frmtstr(time.ctime(entry[KEY_DB_TIME]), 'TIME')
+    local_time = datetime.datetime.fromtimestamp(
+        entry[KEY_DB_TIME], datetime.timezone.utc).astimezone()
     values = {'DIFF'    : frmtstr(diff, diff) if diff else '',
               'TAGS'    : frmtstr(tags, 'TAGS'),
               'USERNAME': username,
@@ -224,7 +220,7 @@ def frmtentry(tags, entry, showpass, diff=None):
               'DIGEST'  : digest,
               'URI'     : uri,
               'NOTE'    : note,
-              'TIME'    : timestamp}
+              'TIME'    : frmtstr(local_time.strftime(TIME), 'TIME')}
     return FORMAT['LIST'].format(**values)
 
 def log(msg, frmt):
@@ -273,22 +269,6 @@ def ttyconfirm(prompt, default_yes=False, default_no=False):
         elif ans in {'n', 'no'}: return False
         else:
             err(f'invalid answer "{ans}"')
-
-def auth(session, sessions):
-    """authorises sessions"""
-    if not SESSION_AUTH: return True
-    warn(f'incoming session {frmtstr(session, "PASSWORD")}...')
-    age = 0
-    if session in sessions:
-        age = SESSION_TIMEOUT + sessions[session] - time.time()
-    if age > 0:
-        warn(f'session not expired yet.  auto-approving...')
-    elif not ttyconfirm('approve this session?', default_yes=True):
-        warn(f'session rejected')
-        return False
-    warn(f'session authorised')
-    sessions[session] = time.time()
-    return True
 
 def askpass(name, confirm=False, stdin=False):
     """prompts users for password"""
@@ -341,16 +321,28 @@ def readbin(path):
 
 def run(command, values):
     """run an external command"""
-    p = subprocess.Popen(command['COMMAND'].format(**values),
+    debug(f'running command "{command}"')
+    command['COMMAND'] = [a.format(**values) for a in command['COMMAND']]
+    try:
+        p = subprocess.Popen(command['COMMAND'],
             stdin   = subprocess.PIPE if command['STDIN'] else None,
             stdout  = subprocess.PIPE if command['TAKE_STDOUT'] else None,
-            stderr  = subprocess.PIPE if command['TAKE_STDERR'] else None,
-            shell   = True)
+            stderr  = subprocess.PIPE if command['TAKE_STDERR'] else None)
+    except FileNotFoundError:
+        err(f'command `{command["COMMAND"][0]}` not found')
+        sys.exit(1)
+    except IndexError:
+        err(f'command is not defined')
+        sys.exit(1)
+    except KeyError as e:
+        err(f'command `{command["COMMAND"][0]}` lacks key {e}')
+        sys.exit(1)
     stdin_parts = [part.format(**values).encode(ENCODING)
         for part in command['STDIN'].split('{KEYFILE}')]
-    glue = values['KEYFILE'] if len(stdin_parts) > 1 else b''
-    stdin = glue.join(stdin_parts)
+    try: stdin = values['KEYFILE'].join(stdin_parts)
+    except (AttributeError, KeyError): stdin = b''.join(stdin_parts) 
     p_stdout, _ = p.communicate(input=stdin)
+    debug(f'return code "{p.returncode}"')
     r = p.returncode if p.returncode in command['RETURN_VALUES'] else '*'
     return p_stdout, command['RETURN_VALUES'][r]
 
@@ -433,16 +425,9 @@ def ipc_init(path):
     atexit.register(os.unlink, path)
     atexit.register(debug, f'deleting named pipe "{path}"...')
 
-def ipc_session(stdin):
-    """obtain ipc session key"""
-    return askpass('session', stdin=stdin) if SESSION_AUTH else None
-
 def ipc_request(path, command, rargs, stdin=False):
     """define ipc request messages"""
-    return {KEY_IPC_SESSION : ipc_session(stdin),
-            KEY_IPC_CMD     : command,
-            KEY_IPC_ARGS    : rargs,
-            KEY_IPC_PATH    : path}
+    return {KEY_IPC_CMD:command, KEY_IPC_ARGS:rargs, KEY_IPC_PATH:path}
 
 def ipc_reply(reply_type, data):
     """define ipc reply messages"""
@@ -627,14 +612,11 @@ allargs = {
     ARG_URI     : {'metavar':'URI', 'type':str,
                     'help':"a uniform resource identifier"},
     ARG_NOTE    : {'metavar':'NOTE', 'type':str, 'help':"a note"},
-    ARG_COMMANDS: {'metavar':'COMMANDS', 'type':str, 'default':'',
-                    'help': f"""perform kctions specified in COMMANDS in
-                    order from left to right.  COMMANDS can be a string
-                    made of characters defined in DO_COMMANDS.  e.g. `nsa
-                    do caveman protonmail -c uod` copies the username
-                    associated with the 'caveman protonmail' tags into the
-                    selection buffer, pastes it, then deletes it from the
-                    selection buffer."""},
+    ARG_COMMANDS: {'metavar':'COMMANDS', 'type':str, 'nargs':'+',
+                    'default':[], 'help': f"""perform actions specified in
+                    COMMANDS in order from left to right.  COMMANDS are
+                    defined in option DO_COMMANDS, which currently are:
+                    {', '.join(list(DO_COMMANDS))}"""},
     ARG_SHOWPASS    : {'action':'store_true', 'help':'show passwords'},
     ARG_STDIN_INPUT : {'action':'store_true', 'help':'input from stdin'},
     ARG_DB_PATH     : {'metavar':'DB', 'type':str,
@@ -681,11 +663,9 @@ if args.command == CMD_START:
     db_orig = {tags:dict(db[tags]) for tags in db}
     password_orig = password
     last_do_query = None
-    sessions = {}
     info('waiting for ipc commands...')
     while True:  # runs indefinitely until stopped by SIGINT or `CMD_STOP`
         request = load_json(ipc_server_path)
-        session = request[KEY_IPC_SESSION]
         rcmd = request[KEY_IPC_CMD]
         rargs = request[KEY_IPC_ARGS]
         client_ipc_path = request[KEY_IPC_PATH]
@@ -693,9 +673,7 @@ if args.command == CMD_START:
 
         # implement nsapass's sub-commands
         replies = []
-        if not auth(session, sessions):
-            replies += ipc_err('requested session got denied')
-        elif rcmd == CMD_CHPASS:
+        if rcmd == CMD_CHPASS:
             password = rargs
             replies += ipc_info('database password updated')
         elif rcmd == CMD_DO :

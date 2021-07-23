@@ -69,8 +69,8 @@ test: clean
 	$(CLN) $(CUR)/$(DB).mod.str > $(CUR)/$(DB).mod.str.cln
 	$(DIFF) $(TRU)/$(DB).mod.str.cln $(CUR)/$(DB).mod.str.cln
 	# test do
-	$(NSA_DO) t t -c k > $(CUR)/keyfile-t_t
-	$(NSA_DO) t d -c k > $(CUR)/keyfile-t_d
+	$(NSA_DO) t t -c keyfile > $(CUR)/keyfile-t_t
+	$(NSA_DO) t d -c keyfile > $(CUR)/keyfile-t_d
 	$(DIFF) $(TRU)/keyfile $(CUR)/keyfile-t_t
 	$(DIFF) $(TRU)/keyfile $(CUR)/keyfile-t_d
 	# test ls
