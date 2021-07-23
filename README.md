@@ -156,11 +156,11 @@ complex to be audit-able, lack critical features, or both.
 
 I've added these shortcuts to my `i3` window manager:
 ```
-bindsym           $mod+i       exec nsa do -c d
-bindsym --release $mod+comma   exec nsa do -c u
-bindsym --release $mod+period  exec nsa do -c p
-bindsym --release $mod+g       exec nsa do -c spodn
-bindsym --release $mod+shift+g exec nsa do -c suodnpodn
+bindsym           $mod+i       exec nsa do -c delclip
+bindsym --release $mod+comma   exec nsa do -c copyuser
+bindsym --release $mod+period  exec nsa do -c copypass
+bindsym --release $mod+g       exec nsa do -c sleep copypass paste delclip enter
+bindsym --release $mod+shift+g exec nsa do -c sleep copyuser paste delclip enter copypass paste delclip enter
 ```
 
 Suppose that I'd like use entries that associate with the tags `EXAMPLE TAGS`.
@@ -189,11 +189,11 @@ It should be also possible to (but I personally don't do it this way):
 
 - Make it even more convenient, by configuring shortcuts with GUI prompts,
   that take advantage of the fact that steps `nsa do EXAMPLE TAGS` and,
-  say, `nsa do -c u` can be combined in a single step `nsa do EXAMPLE TAGS
-  -c u`.
+  say, `nsa do -c copyuser` can be combined in a single step `nsa do
+  EXAMPLE TAGS -c copyuser`.
 - Automate command execution.  E.g. command `z` could be defined in such a
-  way that `nsa do EXAMPLE TAGS -c szuodnpodn` would execute `nsa push`
-  and feed it with passwords as earlier.
+  way that `nsa do EXAMPLE TAGS -c z ...` would execute `nsa push` and feed
+  it with passwords as earlier.
 
 # Dependencies
 
@@ -268,20 +268,19 @@ optional arguments:
   -s          input from stdin
 ```
 ```
-usage: nsa do [-h] [-s] [-c COMMANDS] [QUERY ...]
+usage: nsa do [-h] [-s] [-c COMMANDS [COMMANDS ...]] [QUERY ...]
 
 positional arguments:
-  QUERY        query tags
+  QUERY                 query tags
 
 optional arguments:
-  -h, --help   show this help message and exit
-  -s           input from stdin
-  -c COMMANDS  perform actions specified in COMMANDS in order from left to
-               right. COMMANDS can be a string made of characters defined in
-               DO_COMMANDS. e.g. `nsa do caveman protonmail -c uod` copies the
-               username associated with the 'caveman protonmail' tags into the
-               selection buffer, pastes it, then deletes it from the selection
-               buffer.
+  -h, --help            show this help message and exit
+  -s                    input from stdin
+  -c COMMANDS [COMMANDS ...]
+                        perform actions specified in COMMANDS in order from
+                        left to right. COMMANDS are defined in option
+                        DO_COMMANDS, which currently are: copyuser, copypass,
+                        copyuri, delclip, paste, enter, keyfile, sleep
 ```
 ```
 usage: nsa add [-h] [-t TAG [TAG ...]] [-u USERNAME] [-p SET] [-o LETTERS]
