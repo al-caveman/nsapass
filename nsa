@@ -142,7 +142,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '6.1'
+VERSION = '6.2'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -382,8 +382,8 @@ def load_db(path, stdin):
     try:
         db = json.loads(data)
         # TODO: remove this eventually
+        migrated = set()
         for tags in db:
-            migrated = set()
             # migration from v1.0.0 db format
             if type(db[tags]) is list:
                 migrated.add('v1.0.0')
