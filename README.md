@@ -192,7 +192,7 @@ It should be also possible to (but I personally don't do it this way):
   say, `nsa do -c copyuser` can be combined in a single step `nsa do
   EXAMPLE TAGS -c copyuser`.
 - Automate command execution.  E.g. command `z` could be defined in such a
-  way that `nsa do EXAMPLE TAGS -c z ...` would execute `nsa push` and feed
+  way that `nsa do EXAMPLE TAGS -c z ...` would execute `git push` and feed
   it with passwords as earlier.
 
 # Dependencies
