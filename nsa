@@ -138,7 +138,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '7'
+VERSION = '7.1'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -536,17 +536,15 @@ def ipc_diff(db, db_orig, password, password_orig, rargs):
     original_tags = set(db_orig)
     additions = current_tags - original_tags
     deletions = original_tags - current_tags
-    modifications = current_tags.intersection(original_tags)
+    common = current_tags.intersection(original_tags)
     for tags in additions:
         replies += ipc_entry(db, tags, showpass, 'ADD')
     for tags in deletions:
         replies += ipc_entry(db_orig, tags, showpass, 'DEL')
-    for tags in modifications:
-        for k in db[tags]:
-            if db[tags][k] != db_orig[tags][k]:
-                replies += ipc_entry(db_orig, tags, showpass, 'DEL')
-                replies += ipc_entry(db, tags, showpass, 'ADD')
-                continue
+    for tags in common:
+        if [k for k in db[tags] if db[tags][k] != db_orig[tags][k]]:
+            replies += ipc_entry(db_orig, tags, showpass, 'DEL')
+            replies += ipc_entry(db, tags, showpass, 'ADD')
     if password != password_orig:
         passfrmt = frmtstr(password, 'PASSWORD', showpass)
         replies += ipc_warn(f'updated database password to {passfrmt}')
@@ -731,8 +729,7 @@ elif args.command in {CMD_ADD, CMD_MOD}:
         err(f'set "{args.p}" is not among: {", ".join(PASSWORD_SETS)}')
         sys.exit(1)
     letters = args.o if args.o else PASSWORD_SETS[args.p]
-    if args.b or args.l:
-        password = genpass(args.b, args.l, letters)
+    if args.b or args.l: password = genpass(args.b, args.l, letters)
     if args.m: password = askpass('new entry', confirm=True, stdin=args.s)
     if args.f:
         data = readbin(args.f)
@@ -765,11 +762,11 @@ try:
         fcntl.lockf(f, fcntl.LOCK_EX)
         json.dump(request, f, indent=4)
 except FileNotFoundError:
-    err(f'no named pipe "{ipc_server_path}".  '
-             f'forgot `{cmdname} {CMD_START}`?')
+    err(f'"{ipc_server_path}" not found.  forgot `{cmdname} {CMD_START}`?')
     sys.exit(1)
 except BrokenPipeError:
     err("server's pipe is broken")
+    sys.exit(1)
 
 # processing server's ipc replies
 debug(f'waiting for ipc replies...')
