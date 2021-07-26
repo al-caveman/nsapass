@@ -60,6 +60,9 @@ PASSWORD_SETS = {
 # default passwords set
 DEFAULT_SET = 'printable'
 
+# server timeout in seconds.  0 for no timeout.
+TIMEOUT = 30
+
 # encrypt command
 ENCRYPT_COMMAND = {
     'COMMAND'       : ['ciphart', '-eszk', '-o', '{DATABASE_PATH}'],
@@ -94,15 +97,15 @@ template_command = {
     'TAKE_STDOUT'   : False,
     'RETURN_VALUES' : {0:None, '*':'xclip error'}}
 DO_COMMANDS = {c:dict(template_command) for c in ['copyuser', 'copypass',
-    'copyuri', 'delclip', 'paste', 'enter', 'keyfile', 'sleep']}
+    'copyuri', 'delclip', 'paste', 'enter', 'cat', 'sleep']}
 DO_COMMANDS['copyuser']['STDIN'  ] = '{USERNAME}'
 DO_COMMANDS['copypass']['STDIN'  ] = '{PASSWORD}'
 DO_COMMANDS['copyuri' ]['STDIN'  ] = '{URI}'
 DO_COMMANDS['delclip' ]['STDIN'  ] = '--deleted by nsapass--'
 DO_COMMANDS['paste'   ]['COMMAND'] = ['xdotool', 'key', 'Control+V']
 DO_COMMANDS['enter'   ]['COMMAND'] = ['xdotool', 'key', 'Return']
-DO_COMMANDS['keyfile' ]['COMMAND'] = ['cat']
-DO_COMMANDS['keyfile' ]['STDIN'  ] = '{KEYFILE}'
+DO_COMMANDS['cat'     ]['COMMAND'] = ['cat']
+DO_COMMANDS['cat'     ]['STDIN'  ] = '{DATA}'
 DO_COMMANDS['sleep'   ]['COMMAND'] = ['sleep',  '.1']
 
 # theme
@@ -117,7 +120,7 @@ FORMAT = {
     'INFO'      : '{BGREEN}*{RESET} {}\n',
     'WARN'      : '{YELLOW}[warning]{RESET} {}\n',
     'ERROR'     : '{RED}[error]{RESET} {}\n',
-    'QUESTION'  : '{BLUE}< {}{RESET} ',
+    'PROMPT'    : '{BLUE}< {}{RESET} ',
     'TAGS'      : '{BGREEN}{}{RESET}',
     'USERNAME'  : '{YELLOW}[{}{YELLOW}]{RESET}',
     'PASSWORD'  : '{RED}[{BGRED}{}{RED}]{RESET}',
@@ -138,7 +141,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '7.1'
+VERSION = '8'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -206,21 +209,16 @@ def frmtstr(s, frmt, show=True):
 
 def frmtentry(tags, entry, showpass, diff=None):
     """formats a database entry"""
-    username = frmtstr(entry[KEY_DB_USERNAME], 'USERNAME')
-    password = frmtstr(entry[KEY_DB_PASS], 'PASSWORD', showpass)
-    digest = frmtstr(entry[KEY_DB_DIGEST], 'DIGEST')
-    uri = frmtstr(entry[KEY_DB_URI], 'URI')
-    note = frmtstr(entry[KEY_DB_NOTE], 'NOTE')
     local_time = datetime.datetime.fromtimestamp(
         entry[KEY_DB_TIME], datetime.timezone.utc).astimezone()
-    values = {'DIFF'    : frmtstr(diff, diff) if diff else '',
-              'TAGS'    : frmtstr(tags, 'TAGS'),
-              'USERNAME': username,
-              'PASSWORD': password,
-              'DIGEST'  : digest,
-              'URI'     : uri,
-              'NOTE'    : note,
-              'TIME'    : frmtstr(local_time.strftime(TIME), 'TIME')}
+    values = {'DIFF': frmtstr(diff, diff) if diff else '',
+      'TAGS'    : frmtstr(tags, 'TAGS'),
+      'USERNAME': frmtstr(entry[KEY_DB_USERNAME], 'USERNAME'),
+      'PASSWORD': frmtstr(entry[KEY_DB_PASS], 'PASSWORD', showpass),
+      'DIGEST'  : frmtstr(entry[KEY_DB_DIGEST], 'DIGEST'),
+      'URI'     : frmtstr(entry[KEY_DB_URI], 'URI'),
+      'NOTE'    : frmtstr(entry[KEY_DB_NOTE], 'NOTE'),
+      'TIME'    : frmtstr(local_time.strftime(TIME), 'TIME')}
     return FORMAT['LIST'].format(**values)
 
 def log(msg, frmt):
@@ -247,36 +245,16 @@ def find(db, query):
     if not query: return tags_list
     if query in tags_list: return [query]
     words_escaped = [re.escape(word) for word in query.split()]
-    query_re = r'(^| )' + r'.*? '.join(words_escaped)
+    query_re = r'.*? .*?'.join(words_escaped)
     return [tags for tags in tags_list if re.search(query_re, tags)]
-
-def ttyinput(prompt):
-    """read non-password input from tty"""
-    sys.stdin = open('/dev/tty')
-    return input(prompt)
-
-def ttyconfirm(prompt, default_yes=False, default_no=False):
-    yes = 'Y' if default_yes else 'y'
-    no = 'N' if default_no else 'n'
-    formatted_prompt = frmtstr(f'{prompt} [{yes}/{no}] ', 'QUESTION')
-    while True:
-        ans = ttyinput(formatted_prompt).lower()
-        if ans == '':
-            if default_yes: return True
-            if default_no: return False
-            err('an answer is required')
-        elif ans in {'y', 'yes'}: return True
-        elif ans in {'n', 'no'}: return False
-        else:
-            err(f'invalid answer "{ans}"')
 
 def askpass(name, confirm=False, stdin=False):
     """prompts users for password"""
     f = input if stdin else getpass.getpass
-    pass1 = f(frmtstr(f'{name} password:', 'QUESTION'))
+    pass1 = f(frmtstr(f'{name} password:', 'PROMPT'))
     pass2 = pass1
     if confirm:
-        pass1 = f(frmtstr(f'confirm password:', 'QUESTION'))
+        pass1 = f(frmtstr(f'confirm password:', 'PROMPT'))
     if pass1 == pass2:
         return pass1
     err('passwords mismatched')
@@ -338,8 +316,8 @@ def run(command, values):
         err(f'command `{command["COMMAND"][0]}` lacks key {e}')
         sys.exit(1)
     stdin_parts = [part.format(**values).encode(ENCODING)
-        for part in command['STDIN'].split('{KEYFILE}')]
-    try: stdin = values['KEYFILE'].join(stdin_parts)
+        for part in command['STDIN'].split('{DATA}')]
+    try: stdin = values['DATA'].join(stdin_parts)
     except (AttributeError, KeyError): stdin = b''.join(stdin_parts) 
     p_stdout, _ = p.communicate(input=stdin)
     debug(f'return code "{p.returncode}"')
@@ -373,24 +351,6 @@ def load_db(path, stdin):
         sys.exit(1)
     try:
         db = json.loads(data)
-        # TODO: remove this eventually
-        migrated = set()
-        for tags in db:
-            # migration from v1.0.0 db format
-            if type(db[tags]) is list:
-                migrated.add('v1.0.0')
-                entry = db[tags][0]
-                db[tags] = entry
-            if KEY_DB_URI not in db[tags]: db[tags][KEY_DB_URI] = None
-            # migration from v5.0.0 db format
-            if KEY_DB_DIGEST not in db[tags]:
-                migrated.add('v5.0.0')
-                data = str2bin(db[tags][KEY_DB_DATAB64])
-                digest = hashlib.sha224(data).hexdigest() if data else None
-                db[tags][KEY_DB_DIGEST] = digest
-        if migrated:
-            warn(f'{", ".join(list(migrated))} db updated to {VERSION}')
-            warn('execute `nsa commit` to make upgrade permanent')
         return db, password
     except json.JSONDecodeError:
         err(f'error decoding database "{path}"')
@@ -415,7 +375,9 @@ def ipc_init(path):
     """prepares stuff needed for ipc"""
     dirname = os.path.dirname(path)
     if len(dirname): os.makedirs(dirname, exist_ok=True)
-    try: os.mkfifo(path, mode=400)
+    try: 
+        debug(f'creating ipc file "{path}"...')
+        os.mkfifo(path, mode=400)
     except NotImplementedError:
         err("your operating system doesn't support named pipes")
         sys.exit(1)
@@ -424,6 +386,12 @@ def ipc_init(path):
         sys.exit(1)
     atexit.register(os.unlink, path)
     atexit.register(debug, f'deleting named pipe "{path}"...')
+
+def ipc_uninit(path):
+    """uninitialises ipc"""
+    debug(f'deleting ipc file "{path}"...')
+    atexit.unregister(os.unlink)
+    os.unlink(path)
 
 def ipc_request(path, command, rargs, stdin=False):
     """define ipc request messages"""
@@ -551,12 +519,19 @@ def ipc_diff(db, db_orig, password, password_orig, rargs):
     if not replies: replies += ipc_info('nothing to commit')
     return replies
 
-# register signals
 def handler_sigint(signum, frame):
+    """pretty interrupt handling"""
     info('received interrupt.  exiting...')
     sys.exit(0)
-signal.signal(signal.SIGINT, handler_sigint)
-signal.signal(signal.SIGTERM, handler_sigint)
+
+def handler_sigalrm(signum, frame):
+    """suspend server upon timeout"""
+    info('server timed out.  suspending...')
+    ipc_uninit(ipc_server_path)
+    getpass.getpass(frmtstr('hit enter to resume the server', 'PROMPT'))
+    ipc_init(ipc_server_path)
+    info('server resumed')
+    signal.alarm(TIMEOUT)
 
 # parse arguments
 cmdname = os.path.basename(sys.argv[0])
@@ -606,7 +581,7 @@ allargs = {
                     'help':'generate LEN-long password from SET'},
     ARG_PASS_MAN: {'action':'store_true', 'help':'user-defined password'},
     ARG_PASS_KEY: {'metavar':'PATH', 'type':str,
-                    'help':'key/data file in PATH, or STDIN if "-"'},
+                    'help':'data file in PATH, or STDIN if "-"'},
     ARG_URI     : {'metavar':'URI', 'type':str,
                     'help':"a uniform resource identifier"},
     ARG_NOTE    : {'metavar':'NOTE', 'type':str, 'help':"a note"},
@@ -651,9 +626,14 @@ enable_debug = args.V
 if args.C:
     for c in COLOURS: COLOURS[c] = ''
 if args.i: IPC_DIR = args.i
+ipc_server_path = f'{IPC_DIR}/server'
+
+# register signal handlers
+signal.signal(signal.SIGINT, handler_sigint)
+signal.signal(signal.SIGTERM, handler_sigint)
+signal.signal(signal.SIGALRM, handler_sigalrm)
 
 # starts the server loop
-ipc_server_path = f'{IPC_DIR}/server'
 if args.command == CMD_START:
     ipc_init(ipc_server_path)
     path = args.d if args.d else DATABASE_PATH
@@ -663,6 +643,7 @@ if args.command == CMD_START:
     last_do_query = None
     info('waiting for ipc commands...')
     while True:  # runs indefinitely until stopped by SIGINT or `CMD_STOP`
+        signal.alarm(TIMEOUT)
         request = load_json(ipc_server_path)
         rcmd = request[KEY_IPC_CMD]
         rargs = request[KEY_IPC_ARGS]
@@ -742,9 +723,6 @@ if args.command == CMD_ADD and not args.t:
     sys.exit(1)
 
 # prepare things to talk to server
-if not os.path.exists(ipc_server_path):
-    err(f'ipc path "{ipc_server_path}" not found.  nsapass started?')
-    sys.exit(1)
 ipc_client_path = f'{IPC_DIR}/client.{os.getpid()}'
 ipc_init(ipc_client_path)
 if args.command == CMD_CHPASS: rargs = new_db_pass
@@ -757,12 +735,12 @@ request = ipc_request(ipc_client_path, args.command, rargs)
 # send ipc request
 debug(f'sending ipc request: {request}')
 try:
-    with open(ipc_server_path, 'w') as f:
-        debug(f'exclusive-locking "{ipc_server_path}"...')
-        fcntl.lockf(f, fcntl.LOCK_EX)
-        json.dump(request, f, indent=4)
+    fd = os.open(ipc_server_path, os.O_WRONLY | os.O_NONBLOCK)
+    fcntl.lockf(fd, fcntl.LOCK_EX)
+    os.write(fd, json.dumps(request).encode(ENCODING))
+    os.close(fd)
 except FileNotFoundError:
-    err(f'"{ipc_server_path}" not found.  forgot `{cmdname} {CMD_START}`?')
+    err(f'"{ipc_server_path}" not found.  nsapass stopped or suspended?')
     sys.exit(1)
 except BrokenPipeError:
     err("server's pipe is broken")
@@ -778,7 +756,7 @@ for reply in replies:
     if reply_type == VAL_IPC_REPLY_TYPE_CMD:
         values = {'USERNAME': reply_data[KEY_DB_USERNAME],
                   'PASSWORD': reply_data[KEY_DB_PASS],
-                  'KEYFILE' : str2bin(reply_data[KEY_DB_DATAB64]),
+                  'DATA'    : str2bin(reply_data[KEY_DB_DATAB64]),
                   'URI'     : reply_data[KEY_DB_URI]}
         for command in args.c:
             if command not in DO_COMMANDS:

@@ -46,7 +46,7 @@ test: clean
 	$(PASS) | $(NSA_START)
 	sleep 5
 	# test add
-	$(NSA_ADD) -t tag1 tag2 -n "oy vey" -f $(TRU)/keyfile
+	$(NSA_ADD) -t tag1 tag2 -n "oy vey" -f $(TRU)/data
 	$(NSA_ADD) -t test asd dea s
 	$(NSA_ADD) -t test
 	$(PASS_USR) | $(NSA_ADD) -t asdfa lel -m
@@ -62,17 +62,17 @@ test: clean
 	$(DIFF) $(TRU)/$(DB).del.str.cln $(CUR)/$(DB).del.str.cln
 	# test mod
 	$(NSA_MOD) t t -u barak -r https://mossad.gov.il
-	$(NSA_MOD) t d -f $(TRU)/keyfile
+	$(NSA_MOD) t d -f $(TRU)/data
 	$(PASS_USR) | $(NSA_MOD) t t -m
 	$(NSA_COMMIT)
 	$(PASS) | $(DEC) > $(CUR)/$(DB).mod.str
 	$(CLN) $(CUR)/$(DB).mod.str > $(CUR)/$(DB).mod.str.cln
 	$(DIFF) $(TRU)/$(DB).mod.str.cln $(CUR)/$(DB).mod.str.cln
 	# test do
-	$(NSA_DO) t t -c keyfile > $(CUR)/keyfile-t_t
-	$(NSA_DO) t d -c keyfile > $(CUR)/keyfile-t_d
-	$(DIFF) $(TRU)/keyfile $(CUR)/keyfile-t_t
-	$(DIFF) $(TRU)/keyfile $(CUR)/keyfile-t_d
+	$(NSA_DO) t t -c cat > $(CUR)/data-t_t
+	$(NSA_DO) t d -c cat > $(CUR)/data-t_d
+	$(DIFF) $(TRU)/data $(CUR)/data-t_t
+	$(DIFF) $(TRU)/data $(CUR)/data-t_d
 	# test ls
 	$(NSA_LS)
 	# test chpass
