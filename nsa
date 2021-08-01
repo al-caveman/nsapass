@@ -141,7 +141,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '8'
+VERSION = '8.1'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -500,16 +500,11 @@ def ipc_diff(db, db_orig, password, password_orig, rargs):
     info('diff')
     showpass = rargs[ARG_SHOWPASS]
     replies = []
-    current_tags = set(db)
-    original_tags = set(db_orig)
-    additions = current_tags - original_tags
-    deletions = original_tags - current_tags
-    common = current_tags.intersection(original_tags)
-    for tags in additions:
+    for tags in db.keys() - db_orig.keys():
         replies += ipc_entry(db, tags, showpass, 'ADD')
-    for tags in deletions:
+    for tags in db_orig.keys() - db.keys():
         replies += ipc_entry(db_orig, tags, showpass, 'DEL')
-    for tags in common:
+    for tags in db.keys() & db_orig.keys():
         if [k for k in db[tags] if db[tags][k] != db_orig[tags][k]]:
             replies += ipc_entry(db_orig, tags, showpass, 'DEL')
             replies += ipc_entry(db, tags, showpass, 'ADD')
