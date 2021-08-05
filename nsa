@@ -141,7 +141,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '8.1'
+VERSION = '8.2'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -199,6 +199,12 @@ VAL_IPC_REPLY_TYPE_ERR      = 'err'
 VAL_IPC_REPLY_TYPE_CMD      = 'command'
 VAL_IPC_REPLY_TYPE_ENTRY    = 'entry'
 
+FRMT2KEY = {'USERNAME': KEY_DB_USERNAME, 'PASSWORD': KEY_DB_PASS,
+            'DATA'    : KEY_DB_DATAB64,  'DIGEST'  : KEY_DB_DIGEST,
+            'URI'     : KEY_DB_URI,      'NOTE'    : KEY_DB_NOTE,
+            'TIME'    : KEY_DB_TIME}
+KEY2FRMT = {value:key for key, value in FRMT2KEY.items()}
+
 enable_debug = True
 
 def frmtstr(s, frmt, show=True):
@@ -209,16 +215,16 @@ def frmtstr(s, frmt, show=True):
 
 def frmtentry(tags, entry, showpass, diff=None):
     """formats a database entry"""
+    info(entry)
     local_time = datetime.datetime.fromtimestamp(
         entry[KEY_DB_TIME], datetime.timezone.utc).astimezone()
     values = {'DIFF': frmtstr(diff, diff) if diff else '',
-      'TAGS'    : frmtstr(tags, 'TAGS'),
-      'USERNAME': frmtstr(entry[KEY_DB_USERNAME], 'USERNAME'),
-      'PASSWORD': frmtstr(entry[KEY_DB_PASS], 'PASSWORD', showpass),
-      'DIGEST'  : frmtstr(entry[KEY_DB_DIGEST], 'DIGEST'),
-      'URI'     : frmtstr(entry[KEY_DB_URI], 'URI'),
-      'NOTE'    : frmtstr(entry[KEY_DB_NOTE], 'NOTE'),
-      'TIME'    : frmtstr(local_time.strftime(TIME), 'TIME')}
+              'TAGS': frmtstr(tags, 'TAGS')}
+    for frmt, key in FRMT2KEY.items():
+        if key == KEY_DB_DATAB64: continue
+        show = showpass if key == KEY_DB_PASS else True
+        s = local_time.strftime(TIME) if key == KEY_DB_TIME else entry[key]
+        values[frmt] = frmtstr(s, frmt, show)
     return FORMAT['LIST'].format(**values)
 
 def log(msg, frmt):
@@ -317,8 +323,9 @@ def run(command, values):
         sys.exit(1)
     stdin_parts = [part.format(**values).encode(ENCODING)
         for part in command['STDIN'].split('{DATA}')]
-    try: stdin = values['DATA'].join(stdin_parts)
-    except (AttributeError, KeyError): stdin = b''.join(stdin_parts) 
+    try: data = str2bin(values['DATA'])
+    except (AttributeError, KeyError): data = b''
+    stdin = data.join(stdin_parts)
     p_stdout, _ = p.communicate(input=stdin)
     debug(f'return code "{p.returncode}"')
     r = p.returncode if p.returncode in command['RETURN_VALUES'] else '*'
@@ -375,7 +382,7 @@ def ipc_init(path):
     """prepares stuff needed for ipc"""
     dirname = os.path.dirname(path)
     if len(dirname): os.makedirs(dirname, exist_ok=True)
-    try: 
+    try:
         debug(f'creating ipc file "{path}"...')
         os.mkfifo(path, mode=400)
     except NotImplementedError:
@@ -414,14 +421,17 @@ def ipc_entry(db, tags, showpass, diff=None):
 
 def ipc_do(db, last_query, rargs):
     """implements `do` sub-command"""
-    query = rargs[ARG_QUERY]
-    if not query: query = last_query
+    args, db_keys_list = rargs
+    query = args[ARG_QUERY] if args[ARG_QUERY] else last_query
     tags_list = find(db, query)
     if not tags_list: return ipc_err('nothing matched')
     if len(tags_list) > 1: return ipc_err('too many matched')
     tags = tags_list[0]
     info(f'do {FORMAT["TAGS"].format(tags, **COLOURS)}')
-    return ipc_command(db[tags])
+    replies = []
+    for keys in db_keys_list:
+        replies += ipc_command({k:db[tags][k] for k in keys})
+    return replies
 
 def ipc_add(db, rargs):
     """implements `add` sub-command"""
@@ -651,8 +661,8 @@ if args.command == CMD_START:
             password = rargs
             replies += ipc_info('database password updated')
         elif rcmd == CMD_DO :
+            if rargs[0][ARG_QUERY]: last_do_query = rargs[0][ARG_QUERY]
             replies += ipc_do(db, last_do_query, rargs)
-            if rargs[ARG_QUERY]: last_do_query = rargs[ARG_QUERY]
         elif rcmd == CMD_ADD:   replies += ipc_add(db, rargs)
         elif rcmd == CMD_DEL:   replies += ipc_del(db, rargs)
         elif rcmd == CMD_MOD:   replies += ipc_mod(db, rargs)
@@ -711,11 +721,29 @@ elif args.command in {CMD_ADD, CMD_MOD}:
         data = readbin(args.f)
         datab64s = bin2str(data)
         digest = hashlib.sha224(data).hexdigest()
+elif args.command == CMD_DO:
+    db_keys_list = []
+    for command in args.c:
+        frmt = ''.join(DO_COMMANDS[command]['COMMAND'])
+        frmt += DO_COMMANDS[command]['STDIN']
+        keys = []
+        for _, o, _, _ in string.Formatter().parse(frmt):
+            try: keys.append(FRMT2KEY[o])
+            except KeyError:
+                if o is None: continue
+                err(f'unknown do option "{o}"')
+                sys.exit(1)
+        db_keys_list.append(keys)
 
 # terminate useless cases early on
 if args.command == CMD_ADD and not args.t:
     err('tags are required')
     sys.exit(1)
+if args.command == CMD_DO and args.c:
+    unknown_commands = list(set(args.c) - DO_COMMANDS.keys())
+    if unknown_commands:
+        err(f'unknown do commands: {", ".join(unknown_commands)}')
+        sys.exit(1)
 
 # prepare things to talk to server
 ipc_client_path = f'{IPC_DIR}/client.{os.getpid()}'
@@ -724,6 +752,7 @@ if args.command == CMD_CHPASS: rargs = new_db_pass
 elif args.command in {CMD_ADD, CMD_MOD}:
     rargs = [vars(args), password, datab64s, digest]
 elif args.command == CMD_COMMIT: rargs = args.d
+elif args.command == CMD_DO: rargs = [vars(args), db_keys_list]
 else: rargs = vars(args)
 request = ipc_request(ipc_client_path, args.command, rargs)
 
@@ -745,21 +774,17 @@ except BrokenPipeError:
 debug(f'waiting for ipc replies...')
 replies = load_json(ipc_client_path)
 debug(f'got replies: {replies}')
+command_i = 0
 for reply in replies:
     reply_type = reply[KEY_IPC_REPLY_TYPE]
     reply_data = reply[KEY_IPC_REPLY_DATA]
     if reply_type == VAL_IPC_REPLY_TYPE_CMD:
-        values = {'USERNAME': reply_data[KEY_DB_USERNAME],
-                  'PASSWORD': reply_data[KEY_DB_PASS],
-                  'DATA'    : str2bin(reply_data[KEY_DB_DATAB64]),
-                  'URI'     : reply_data[KEY_DB_URI]}
-        for command in args.c:
-            if command not in DO_COMMANDS:
-                err(f'undefined command "{command}"')
-                continue
-            stdout, err_msg = run(DO_COMMANDS[command], values)
-            if stdout: sys.stdout.write(stdout)
-            if err_msg: err(err_msg)
+        command = args.c[command_i]
+        command_i += 1
+        values = {KEY2FRMT[key]:value for key, value in reply_data.items()}
+        stdout, err_msg = run(DO_COMMANDS[command], values)
+        if stdout: sys.stdout.write(stdout)
+        if err_msg: err(err_msg)
         continue
     fout = sys.stdout.write
     if reply_type == VAL_IPC_REPLY_TYPE_DEBUG  : fout = debug
