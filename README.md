@@ -6,7 +6,7 @@ complex to be audit-able, lack critical features, or both.
 
 <p align="center"><img src="pics/screenshot_init.png"></p>
 <p align="center"><strong>Fig 1.</strong> Initial setup.</p>
-    
+
 <p align="center"><img src="pics/screenshot_someuse.png"></p>
 <p align="center"><strong>Fig 2.</strong> Some use.</p>
 
@@ -36,9 +36,9 @@ complex to be audit-able, lack critical features, or both.
 
   This allows for neat automations.  The argument `-c` allows to define a
   sequence of actions.  E.g. with default `DO_COMMANDS`, `nsa do caveman -c
-  pod` will 1st load the password into clipboard (`p`), paste it by
-  emulating `Ctrl+V` (`o`), and then deleting the password in the clipboard
-  (`d`).  
+  copypass paste delclip` will 1st load the password into clipboard, paste
+  it by emulating `Ctrl+V`, and then deleting the password in the
+  clipboard.
 
   You can define your own automations, with your own magical external
   commands.  E.g. you may even skip the clipboard and do it entirely using
