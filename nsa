@@ -141,7 +141,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '8.2'
+VERSION = '8.3'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -215,7 +215,6 @@ def frmtstr(s, frmt, show=True):
 
 def frmtentry(tags, entry, showpass, diff=None):
     """formats a database entry"""
-    info(entry)
     local_time = datetime.datetime.fromtimestamp(
         entry[KEY_DB_TIME], datetime.timezone.utc).astimezone()
     values = {'DIFF': frmtstr(diff, diff) if diff else '',
