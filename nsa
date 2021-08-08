@@ -70,7 +70,7 @@ KDF_COMMAND = {
     'STDIN'         : '{DATABASE_PASSWORD}',
     'TAKE_STDERR'   : False,
     'TAKE_STDOUT'   : True,
-    'RETURN_VALUES' : {0:None, '*':'openssl error'}}
+    'RETURN_VALUES' : {0:None, '*':'argon2 error'}}
 
 # encrypt command
 ENCRYPT_COMMAND = {
@@ -143,7 +143,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9'
+VERSION = '9.1'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
