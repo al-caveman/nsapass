@@ -1,9 +1,9 @@
 IPC=./ipc_dir
 TRU=./truth
 CUR=./current
-DB=test_db.ciphart
+DB=test_db
 
-NSA       =../nsa -i $(IPC)
+NSA       =../nsa -Vi $(IPC)
 NSA_CREATE=$(NSA) create -s -d $(CUR)/$(DB)
 NSA_START =$(NSA) start -s -d $(CUR)/$(DB) &
 NSA_STOP  =$(NSA) stop
@@ -16,13 +16,14 @@ NSA_LS    =$(NSA) ls
 NSA_REVERT=$(NSA) revert
 NSA_COMMIT=$(NSA) commit
 
-PASS     =echo    "lol"
-PASS2    =echo -e "lol\nlol"
-PASS_NEW =echo    "rofl"
-PASS_NEW2=echo -e "rofl\nrofl"
-PASS_USR =echo -e "lel\nlel"
+PASS     =echo -n  "lol"
+PASS2    =echo -ne "lol\nlol"
+PASS_NEW =echo -n  "rofl"
+PASS_NEW2=echo -ne "rofl\nrofl"
+PASS_USR =echo -ne "lel\nlel"
 
-DEC=ciphart -dks -i $(CUR)/$(DB)
+KDF=argon2 nsapasssalt -d -k 1048576 -p 4 -t 20 -r
+DEC=$(KDF) | openssl enc -chacha20 -in=$(CUR)/$(DB) -d -kfile=- -iter=1
 CLN=python ./striptimestamps.py
 DIFF=diff --color=always -u
 

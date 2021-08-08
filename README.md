@@ -90,10 +90,10 @@ complex to be audit-able, lack critical features, or both.
     You will be free to choose the most memorable method to tag your entry,
     without conerns of leaking it in plain text in the file system.
 
-  - Is limited to `gpg` for file encryption and decryption, a bloated tool.
+  - Is limited to `gpg` for file encryption and decryption; a bloated tool.
 
-    _nsapass_ allows you to use any other file encryption and decryption
-    tool.
+    _nsapass_ not only allows you to use any file encryption and decryption
+    tool of your choice, but also any key derivation function.
 
   - Lots of limitations:
     - E.g. _pass_'s password generation isn't able to generate desired
@@ -198,11 +198,13 @@ It should be also possible to (but I personally don't do it this way):
 # Dependencies
 
 - Python.
-- Any file encryption and decryption tool of your choice (as long as it can
-  read passwords and plaintext input as STDIN, and write ciphertext output
-  as STDOUT).
+- Any key derivation function.
 
-  By default [`ciphart`](https://github.com/Al-Caveman/ciphart) is used.
+  By default [`argon2`](https://github.com/p-h-c/phc-winner-argon2) is
+  used.
+- Any file encryption and decryption tool of your choice.
+
+  By default [`ciphart`](https://www.openssl.org/) is used.
 - Any external commands to do whatever you want with your entries.
 
   By default [`xclip`](https://github.com/astrand/xclip) and

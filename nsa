@@ -48,7 +48,7 @@ IPC_DIR = '/tmp/nsapass'
 ENCODING = 'utf-8'
 
 # location of encrypted passwords db
-DATABASE_PATH = os.path.expanduser('~/.local/share/nsapass/db.ciphart')
+DATABASE_PATH = os.path.expanduser('~/.local/share/nsapass/db')
 
 # password character sets
 PASSWORD_SETS = {
@@ -63,29 +63,31 @@ DEFAULT_SET = 'printable'
 # server timeout in seconds.  0 for no timeout.
 TIMEOUT = 30
 
+# key derivation function command.  set it to None to disable it
+KDF_COMMAND = {
+    'COMMAND'       : ['argon2', 'nsapasssalt', '-d', '-t', '20',
+                       '-k', '1048576', '-p', '4', '-r'],
+    'STDIN'         : '{DATABASE_PASSWORD}',
+    'TAKE_STDERR'   : False,
+    'TAKE_STDOUT'   : True,
+    'RETURN_VALUES' : {0:None, '*':'openssl error'}}
+
 # encrypt command
 ENCRYPT_COMMAND = {
-    'COMMAND'       : ['ciphart', '-eszk', '-o', '{DATABASE_PATH}'],
-    'STDIN'         : '{DATABASE_PASSWORD}\n{DATABASE_DATA}',
-    'TAKE_STDERR'   : True,
+    'COMMAND'       : ['openssl', 'enc', '-chacha20',
+                       '-out={DATABASE_PATH}', '-e',
+                       '-k={DATABASE_PASSWORD}', '-iter=1'],
+    'STDIN'         : '{DATABASE_DATA}',
+    'TAKE_STDERR'   : False,
     'TAKE_STDOUT'   : True,
-    'RETURN_VALUES' : {
-        0   : None, # success, no error
-        1   : 'ciphart reported a general failure',
-        2   : 'ciphart reported libsodium failure',
-        3   : 'ciphart reported argument parsing failure',
-        4   : 'ciphart reported io failure',
-        5   : 'ciphart reported memory allocation failure',
-        6   : 'ciphart reported threading failure',
-        7   : 'ciphart reported bad password or corrupted input',
-       '*'  : 'ciphart reported an unknown failure' # default error
-    }
-}
+    'RETURN_VALUES' : {0:None, '*':'openssl error'}}
 
 # decrypt command
 DECRYPT_COMMAND = dict(ENCRYPT_COMMAND)
-DECRYPT_COMMAND['COMMAND'] = ['ciphart', '-dsk', '-i', '{DATABASE_PATH}']
-DECRYPT_COMMAND['STDIN'] = '{DATABASE_PASSWORD}'
+DECRYPT_COMMAND['COMMAND'] = ['openssl', 'enc', '-chacha20',
+                              '-in={DATABASE_PATH}', '-d',
+                              '-k={DATABASE_PASSWORD}', '-iter=1']
+DECRYPT_COMMAND['STDIN'] = ''
 
 # commands used by `nsa do -c COMMANDS`.  each command must be a single
 # letter.  below is an example of defining commands to copy and paste
@@ -141,7 +143,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '8.2'
+VERSION = '9'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'
@@ -306,30 +308,52 @@ def readbin(path):
 def run(command, values):
     """run an external command"""
     debug(f'running command "{command}"')
-    command['COMMAND'] = [a.format(**values) for a in command['COMMAND']]
+    debug(f'command values "{values}"')
+    command_formatted = [a.format(**values) for a in command['COMMAND']]
     try:
-        p = subprocess.Popen(command['COMMAND'],
+        p = subprocess.Popen(command_formatted,
             stdin   = subprocess.PIPE if command['STDIN'] else None,
             stdout  = subprocess.PIPE if command['TAKE_STDOUT'] else None,
             stderr  = subprocess.PIPE if command['TAKE_STDERR'] else None)
     except FileNotFoundError:
-        err(f'command `{command["COMMAND"][0]}` not found')
+        err(f'command `{command_formatted[0]}` not found')
         sys.exit(1)
     except IndexError:
         err(f'command is not defined')
         sys.exit(1)
     except KeyError as e:
-        err(f'command `{command["COMMAND"][0]}` lacks key {e}')
+        err(f'command `{command_formatted[0]}` lacks key {e}')
         sys.exit(1)
-    stdin_parts = [part.format(**values).encode(ENCODING)
-        for part in command['STDIN'].split('{DATA}')]
-    try: data = str2bin(values['DATA'])
-    except (AttributeError, KeyError): data = b''
-    stdin = data.join(stdin_parts)
+    stdin = b''
+    for before, field, _, _ in string.Formatter().parse(command['STDIN']):
+        stdin += before.encode(ENCODING)
+        if field is None: continue
+        if field not in values:
+            err(f'unknown command format field "{field}"')
+            sys.exit(1)
+        value = values[field]
+        if field == 'DATA': stdin += str2bin(value)
+        elif type(values[field]) is str: stdin += value.encode(ENCODING)
+        elif type(values[field]) is bytes: stdin += value
+        else:
+            err(f'unknown command field data type "{type(part)}"')
+            sys.exit(1)
     p_stdout, _ = p.communicate(input=stdin)
     debug(f'return code "{p.returncode}"')
     r = p.returncode if p.returncode in command['RETURN_VALUES'] else '*'
     return p_stdout, command['RETURN_VALUES'][r]
+
+def kdf(password):
+    """key derivation function"""
+    if KDF_COMMAND:
+        values = {'DATABASE_PASSWORD':password}
+        password, kdf_err = run(KDF_COMMAND, values)
+        if kdf_err:
+            err(kdf_err)
+            sys.exit(1)
+        password = password.decode(ENCODING).rstrip('\n')
+    debug(f'derived key "{password}"')
+    return password
 
 def load_json(path):
     """loads a json file"""
@@ -350,7 +374,7 @@ def load_db(path, stdin):
     if not os.path.exists(path):
         err(f'database "{path}" not found.  did you create it?')
         sys.exit(1)
-    password = askpass('database', stdin=stdin)
+    password = kdf(askpass('database', stdin=stdin))
     values = {'DATABASE_PATH' : path, 'DATABASE_PASSWORD' : password}
     data, err_msg = run(DECRYPT_COMMAND, values)
     if err_msg:
@@ -359,8 +383,8 @@ def load_db(path, stdin):
     try:
         db = json.loads(data)
         return db, password
-    except json.JSONDecodeError:
-        err(f'error decoding database "{path}"')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        err(f'error decoding database "{path}".  bad password?')
     sys.exit(1)
 
 def save_db(db, path, password):
@@ -658,7 +682,8 @@ if args.command == CMD_START:
         # implement nsapass's sub-commands
         replies = []
         if rcmd == CMD_CHPASS:
-            password = rargs
+            info('updating database password...')
+            password = kdf(rargs)
             replies += ipc_info('database password updated')
         elif rcmd == CMD_DO :
             if rargs[0][ARG_QUERY]: last_do_query = rargs[0][ARG_QUERY]
@@ -701,7 +726,7 @@ if args.command == CMD_CREATE:
     if os.path.exists(path):
         err(f'database "{path}" already exists')
         sys.exit(1)
-    password = askpass('new database', confirm=True, stdin=args.s)
+    password = kdf(askpass('new database', confirm=True, stdin=args.s))
     save_db({}, path, password)
     info(f'database created in "{path}"')
     sys.exit(0)
@@ -727,12 +752,12 @@ elif args.command == CMD_DO:
         frmt = ''.join(DO_COMMANDS[command]['COMMAND'])
         frmt += DO_COMMANDS[command]['STDIN']
         keys = []
-        for _, o, _, _ in string.Formatter().parse(frmt):
-            try: keys.append(FRMT2KEY[o])
-            except KeyError:
-                if o is None: continue
-                err(f'unknown do option "{o}"')
+        for _, field, _, _ in string.Formatter().parse(frmt):
+            if field is None: continue
+            if field not in FRMT2KEY:
+                err(f'unknown do format field "{field}"')
                 sys.exit(1)
+            keys.append(FRMT2KEY[field])
         db_keys_list.append(keys)
 
 # terminate useless cases early on
@@ -763,7 +788,7 @@ try:
     fcntl.lockf(fd, fcntl.LOCK_EX)
     os.write(fd, json.dumps(request).encode(ENCODING))
     os.close(fd)
-except FileNotFoundError:
+except OSError:
     err(f'"{ipc_server_path}" not found.  nsapass stopped or suspended?')
     sys.exit(1)
 except BrokenPipeError:
@@ -784,7 +809,9 @@ for reply in replies:
         values = {KEY2FRMT[key]:value for key, value in reply_data.items()}
         stdout, err_msg = run(DO_COMMANDS[command], values)
         if stdout: sys.stdout.write(stdout)
-        if err_msg: err(err_msg)
+        if err_msg:
+            err(err_msg)
+            sys.exit(1)
         continue
     fout = sys.stdout.write
     if reply_type == VAL_IPC_REPLY_TYPE_DEBUG  : fout = debug
