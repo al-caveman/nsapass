@@ -198,18 +198,14 @@ It should be also possible to (but I personally don't do it this way):
 # Dependencies
 
 - Python.
-- Any key derivation function.
-
-  By default [`argon2`](https://github.com/p-h-c/phc-winner-argon2) is
-  used.
-- Any file encryption and decryption tool of your choice.
-
-  By default [`ciphart`](https://www.openssl.org/) is used.
+- Any key derivation function tool.  Default:
+  [`argon2`](https://github.com/p-h-c/phc-winner-argon2).
+- Any file encryption and decryption tool.  Default:
+  [`openssl`](https://www.openssl.org/).
 - Any external commands to do whatever you want with your entries.
-
-  By default [`xclip`](https://github.com/astrand/xclip) and
-  [`xdotool`](http://www.semicomplete.com/projects/xdotool) are used for
-  clipboard management and keyboard emulations, respectively.
+  Default: [`xclip`](https://github.com/astrand/xclip) and
+  [`xdotool`](http://www.semicomplete.com/projects/xdotool) for clipboard
+  management and keyboard emulation, respectively.
 
 # Manual
 
