@@ -217,7 +217,6 @@ def frmtstr(s, frmt, show=True):
 
 def frmtentry(tags, entry, showpass, diff=None):
     """formats a database entry"""
-    info(entry)
     local_time = datetime.datetime.fromtimestamp(
         entry[KEY_DB_TIME], datetime.timezone.utc).astimezone()
     values = {'DIFF': frmtstr(diff, diff) if diff else '',
