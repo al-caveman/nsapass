@@ -122,17 +122,15 @@ complex to be audit-able, lack critical features, or both.
   _nsapass_, _pass_ rather feels very bloated; _nsapass_ does much more
   with about the same size of about `800` lines of code.
 
-# Usage
-
-## Installation
+# Installation
 
 1. **Optional:** Edit file `nsa` to apply your configurations.
 1. Paste the file `nsa` in wherever you'd like it to be.  Perhaps somewhere
    in `PATH`.
 
-## Usage example
+# Tutorial
 
-### Database creation and housekeeping
+## Database creation and housekeeping
 1. `nsa create` to create an empty database.  This is done only once.
 1. `nsa start` will load the nsapass server.
 1. In a separate terminal, use commands `nsa (ls | add | del | mod | diff |
@@ -152,7 +150,7 @@ complex to be audit-able, lack critical features, or both.
    1. When no longer in need of _nsapass_, execute `nsa stop` to stop the
       server.
 
-### An example of convenient use
+## An example of convenient use
 
 I've added these shortcuts to my `i3` window manager:
 ```
