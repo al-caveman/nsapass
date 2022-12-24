@@ -54,11 +54,10 @@ DATABASE_PATH = os.path.expanduser('~/.local/share/nsapass/db')
 PASSWORD_SETS = {
     'alphanumerics' : string.ascii_letters + string.digits,
     'hexdigits'     : string.hexdigits,
-    'printable'     : ''.join(c for c in string.printable if c not in
-                      string.whitespace)}
+}
 
 # default passwords set
-DEFAULT_SET = 'printable'
+DEFAULT_SET = 'alphanumerics'
 
 # server timeout in seconds.  0 for no timeout.
 TIMEOUT = 30
@@ -97,18 +96,23 @@ template_command = {
     'STDIN'         : '',
     'TAKE_STDERR'   : False,
     'TAKE_STDOUT'   : False,
-    'RETURN_VALUES' : {0:None, '*':'xclip error'}}
-DO_COMMANDS = {c:dict(template_command) for c in ['copyuser', 'copypass',
-    'copyuri', 'delclip', 'paste', 'enter', 'cat', 'sleep']}
+    'RETURN_VALUES' : {0:None, '*':'external command error'}}
+DO_COMMANDS = {c:dict(template_command) for c in [
+    'copyuser', 'copypass', 'copyuri', 'delclip', 'enter', 'sleep',
+    'enter', 'sleep', 'cat', 'typeuser', 'typepass']}
 DO_COMMANDS['copyuser']['STDIN'  ] = '{USERNAME}'
 DO_COMMANDS['copypass']['STDIN'  ] = '{PASSWORD}'
 DO_COMMANDS['copyuri' ]['STDIN'  ] = '{URI}'
-DO_COMMANDS['delclip' ]['STDIN'  ] = '--deleted by nsapass--'
-DO_COMMANDS['paste'   ]['COMMAND'] = ['xdotool', 'key', 'Control+V']
+DO_COMMANDS['delclip' ]['STDIN'  ] = '--deleted by naspass--'
 DO_COMMANDS['enter'   ]['COMMAND'] = ['xdotool', 'key', 'Return']
+DO_COMMANDS['sleep'   ]['COMMAND'] = ['sleep', '.1']
 DO_COMMANDS['cat'     ]['COMMAND'] = ['cat']
 DO_COMMANDS['cat'     ]['STDIN'  ] = '{DATA}'
-DO_COMMANDS['sleep'   ]['COMMAND'] = ['sleep',  '.1']
+DO_COMMANDS['typeuser']['COMMAND'] = ['xdotool', '-']
+DO_COMMANDS['typeuser']['STDIN'  ] = 'type {USERNAME}'
+DO_COMMANDS['typepass']['COMMAND'] = ['xdotool', '-']
+DO_COMMANDS['typepass']['STDIN'  ] = 'type {PASSWORD}'
+
 
 # theme
 TIME = '%Y-%m-%d %H:%M'
@@ -143,7 +147,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9.1'
+VERSION = '9.2'
 YEAR    = '2021'
 
 CMD_CREATE  = 'create'

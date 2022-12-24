@@ -1,7 +1,7 @@
 usage: nsa [-h] [-v] [-V] [-C] [-i DIR]
            {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert} ...
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   -v                    show information about nsapass
   -V                    show debugging information
