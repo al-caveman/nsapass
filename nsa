@@ -114,7 +114,7 @@ DO_COMMANDS['typepass'    ]['COMMAND'] = ['xdotool', '-']
 DO_COMMANDS['typepass'    ]['STDIN'  ] = 'type {PASSWORD}'
 DO_COMMANDS['typeuserpass']['COMMAND'] = ['xdotool', '-']
 DO_COMMANDS['typeuserpass']['STDIN'  ] = \
-        'type {USERNAME}\nkey Return\ntype {PASSWORD}'
+        'type {USERNAME}\nkey Return\ntype {PASSWORD}\nkey Return'
 
 # theme
 TIME = '%Y-%m-%d %H:%M'
@@ -149,8 +149,8 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9.2'
-YEAR    = '2021'
+VERSION = '9.3'
+YEAR    = '2022'
 
 CMD_CREATE  = 'create'
 CMD_CHPASS  = 'chpass'
