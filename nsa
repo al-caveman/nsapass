@@ -92,29 +92,20 @@ DECRYPT_COMMAND['STDIN'] = ''
 # letter.  below is an example of defining commands to copy and paste
 # various fields from the database.
 template_command = {
-    'COMMAND'       : ['xclip', '-selection', 'clipboard'],
+    'COMMAND'       : ['xdotool', '-'],
     'STDIN'         : '',
     'TAKE_STDERR'   : False,
     'TAKE_STDOUT'   : False,
     'RETURN_VALUES' : {0:None, '*':'external command error'}}
 DO_COMMANDS = {c:dict(template_command) for c in [
-    'copyuser', 'copypass', 'copyuri', 'delclip', 'enter', 'sleep',
-    'enter', 'sleep', 'cat', 'typeuser', 'typepass', 'typeuserpass']}
-DO_COMMANDS['copyuser'    ]['STDIN'  ] = '{USERNAME}'
-DO_COMMANDS['copypass'    ]['STDIN'  ] = '{PASSWORD}'
-DO_COMMANDS['copyuri'     ]['STDIN'  ] = '{URI}'
-DO_COMMANDS['delclip'     ]['STDIN'  ] = '--deleted by naspass--'
-DO_COMMANDS['enter'       ]['COMMAND'] = ['xdotool', 'key', 'Return']
-DO_COMMANDS['sleep'       ]['COMMAND'] = ['sleep', '.1']
+    'typeuri', 'typeuser', 'typepass', 'typeuserpass', 'cat']}
+DO_COMMANDS['typeuri'     ]['STDIN'  ] = "type '{URI}'"
+DO_COMMANDS['typeuser'    ]['STDIN'  ] = "type '{USERNAME}'"
+DO_COMMANDS['typepass'    ]['STDIN'  ] = "type '{PASSWORD}'"
+DO_COMMANDS['typeuserpass']['STDIN'  ] = \
+    'type {USERNAME}\nkey Return\ntype {PASSWORD}\nkey Return'
 DO_COMMANDS['cat'         ]['COMMAND'] = ['cat']
 DO_COMMANDS['cat'         ]['STDIN'  ] = '{DATA}'
-DO_COMMANDS['typeuser'    ]['COMMAND'] = ['xdotool', '-']
-DO_COMMANDS['typeuser'    ]['STDIN'  ] = 'type {USERNAME}'
-DO_COMMANDS['typepass'    ]['COMMAND'] = ['xdotool', '-']
-DO_COMMANDS['typepass'    ]['STDIN'  ] = 'type {PASSWORD}'
-DO_COMMANDS['typeuserpass']['COMMAND'] = ['xdotool', '-']
-DO_COMMANDS['typeuserpass']['STDIN'  ] = \
-        'type {USERNAME}\nkey Return\ntype {PASSWORD}\nkey Return'
 
 # theme
 TIME = '%Y-%m-%d %H:%M'
@@ -149,7 +140,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9.3'
+VERSION = '9.4'
 YEAR    = '2022'
 
 CMD_CREATE  = 'create'
