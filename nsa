@@ -99,20 +99,22 @@ template_command = {
     'RETURN_VALUES' : {0:None, '*':'external command error'}}
 DO_COMMANDS = {c:dict(template_command) for c in [
     'copyuser', 'copypass', 'copyuri', 'delclip', 'enter', 'sleep',
-    'enter', 'sleep', 'cat', 'typeuser', 'typepass']}
-DO_COMMANDS['copyuser']['STDIN'  ] = '{USERNAME}'
-DO_COMMANDS['copypass']['STDIN'  ] = '{PASSWORD}'
-DO_COMMANDS['copyuri' ]['STDIN'  ] = '{URI}'
-DO_COMMANDS['delclip' ]['STDIN'  ] = '--deleted by naspass--'
-DO_COMMANDS['enter'   ]['COMMAND'] = ['xdotool', 'key', 'Return']
-DO_COMMANDS['sleep'   ]['COMMAND'] = ['sleep', '.1']
-DO_COMMANDS['cat'     ]['COMMAND'] = ['cat']
-DO_COMMANDS['cat'     ]['STDIN'  ] = '{DATA}'
-DO_COMMANDS['typeuser']['COMMAND'] = ['xdotool', '-']
-DO_COMMANDS['typeuser']['STDIN'  ] = 'type {USERNAME}'
-DO_COMMANDS['typepass']['COMMAND'] = ['xdotool', '-']
-DO_COMMANDS['typepass']['STDIN'  ] = 'type {PASSWORD}'
-
+    'enter', 'sleep', 'cat', 'typeuser', 'typepass', 'typeuserpass']}
+DO_COMMANDS['copyuser'    ]['STDIN'  ] = '{USERNAME}'
+DO_COMMANDS['copypass'    ]['STDIN'  ] = '{PASSWORD}'
+DO_COMMANDS['copyuri'     ]['STDIN'  ] = '{URI}'
+DO_COMMANDS['delclip'     ]['STDIN'  ] = '--deleted by naspass--'
+DO_COMMANDS['enter'       ]['COMMAND'] = ['xdotool', 'key', 'Return']
+DO_COMMANDS['sleep'       ]['COMMAND'] = ['sleep', '.1']
+DO_COMMANDS['cat'         ]['COMMAND'] = ['cat']
+DO_COMMANDS['cat'         ]['STDIN'  ] = '{DATA}'
+DO_COMMANDS['typeuser'    ]['COMMAND'] = ['xdotool', '-']
+DO_COMMANDS['typeuser'    ]['STDIN'  ] = 'type {USERNAME}'
+DO_COMMANDS['typepass'    ]['COMMAND'] = ['xdotool', '-']
+DO_COMMANDS['typepass'    ]['STDIN'  ] = 'type {PASSWORD}'
+DO_COMMANDS['typeuserpass']['COMMAND'] = ['xdotool', '-']
+DO_COMMANDS['typeuserpass']['STDIN'  ] = \
+        'type {USERNAME}\nkey Return\ntype {PASSWORD}'
 
 # theme
 TIME = '%Y-%m-%d %H:%M'
