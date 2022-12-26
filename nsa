@@ -98,11 +98,11 @@ template_command = {
     'TAKE_STDOUT'   : False,
     'RETURN_VALUES' : {0:None, '*':'external command error'}}
 DO_COMMANDS = {c:dict(template_command) for c in [
-    'typeuri', 'typeuser', 'typepass', 'typeuserpass', 'cat']}
-DO_COMMANDS['typeuri'     ]['STDIN'  ] = "type '{URI}'"
-DO_COMMANDS['typeuser'    ]['STDIN'  ] = "type '{USERNAME}'"
-DO_COMMANDS['typepass'    ]['STDIN'  ] = "type '{PASSWORD}'"
-DO_COMMANDS['typeuserpass']['STDIN'  ] = \
+    'uri', 'user', 'pass', 'userpass', 'cat']}
+DO_COMMANDS['uri'     ]['STDIN'  ] = "type '{URI}'"
+DO_COMMANDS['user'    ]['STDIN'  ] = "type '{USERNAME}'"
+DO_COMMANDS['pass'    ]['STDIN'  ] = "type '{PASSWORD}'"
+DO_COMMANDS['userpass']['STDIN'  ] = \
     'type {USERNAME}\nkey Return\ntype {PASSWORD}\nkey Return'
 DO_COMMANDS['cat'         ]['COMMAND'] = ['cat']
 DO_COMMANDS['cat'         ]['STDIN'  ] = '{DATA}'
@@ -140,7 +140,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9.4'
+VERSION = '9.5'
 YEAR    = '2022'
 
 CMD_CREATE  = 'create'
