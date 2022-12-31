@@ -103,9 +103,9 @@ DO_COMMANDS['uri' ]['STDIN'] = "type '{URI}'"
 DO_COMMANDS['user']['STDIN'] = "type '{USERNAME}'"
 DO_COMMANDS['pass']['STDIN'] = "type '{PASSWORD}'"
 DO_COMMANDS['cli' ]['STDIN'] = \
-    'type {USERNAME}\nkey Return\ntype {PASSWORD}\nkey Return'
+    'type "{USERNAME}"\nkey Return\ntype "{PASSWORD}"\nkey Return'
 DO_COMMANDS['web' ]['STDIN'] = \
-    'type {USERNAME}\nkey Tab\ntype {PASSWORD}\nkey Return'
+    'type "{USERNAME}"\nkey Tab\ntype "{PASSWORD}"\nkey Return'
 DO_COMMANDS['cat'         ]['COMMAND'] = ['cat']
 DO_COMMANDS['cat'         ]['STDIN'  ] = '{DATA}'
 
@@ -142,7 +142,7 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9.6'
+VERSION = '9.7'
 YEAR    = '2022'
 
 CMD_CREATE  = 'create'
