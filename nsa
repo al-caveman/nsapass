@@ -112,29 +112,30 @@ DO_COMMANDS['cat'         ]['STDIN'  ] = '{DATA}'
 # theme
 TIME = '%Y-%m-%d %H:%M'
 COLOURS = {'RED'    : '\33[0;31m', 'BRED'   : '\33[1;31m',
-           'BGRED'  : '\33[0;41m','YELLOW' : '\33[0;33m',
+           'BGRED'  : '\33[0;41m', 'YELLOW' : '\33[0;33m',
            'BGREEN' : '\33[1;32m', 'BLUE'   : '\33[0;34m',
            'GRAY'   : '\33[0;90m', 'MAGENTA': '\33[0;35m',
            'RESET'  : '\33[0m'}
 FORMAT = {
-    'DEBUG'     : '{MAGENTA}[debug]{RESET} {}\n',
-    'INFO'      : '{BGREEN}*{RESET} {}\n',
-    'WARN'      : '{YELLOW}[warning]{RESET} {}\n',
-    'ERROR'     : '{RED}[error]{RESET} {}\n',
-    'PROMPT'    : '{BLUE}< {}{RESET} ',
-    'TAGS'      : '{BGREEN}{}{RESET}',
-    'USERNAME'  : '{YELLOW}[{}{YELLOW}]{RESET}',
-    'PASSWORD'  : '{RED}[{BGRED}{}{RED}]{RESET}',
-    'DIGEST'    : '{RED}[{:.10}{RED}]{RESET}',
-    'TIME'      : '{BLUE}{}{RESET}',
-    'URI'       : '{MAGENTA}[{}{MAGENTA}]{RESET}',
-    'NOTE'      : '{GRAY}[{}]{RESET}',
-    'HIDDEN'    : '{GRAY}******{RESET}',
-    'NONE'      : '',
-    'ADD'       : '{BGREEN}+ {RESET}',
-    'DEL'       : '{BRED}- {RESET}',
-    'LIST'      : '{DIFF}{TIME} {TAGS} {USERNAME} {PASSWORD} '
-                  '{DIGEST} {URI} {NOTE}\n'}
+    'DEBUG'       : '{MAGENTA}[debug]{RESET} {}\n',
+    'INFO'        : '{BGREEN}*{RESET} {}\n',
+    'WARN'        : '{YELLOW}*{RESET} {}\n',
+    'ERROR'       : '{RED}[error]{RESET} {}\n',
+    'PROMPT'      : '{BLUE}< {}{RESET} ',
+    'PROMPTSTDIN' : '{BLUE}< {} (stdin){RESET}\n',
+    'TAGS'        : '{BGREEN}{}{RESET}',
+    'USERNAME'    : '{YELLOW}[{}{YELLOW}]{RESET}',
+    'PASSWORD'    : '{RED}[{BGRED}{}{RED}]{RESET}',
+    'DIGEST'      : '{RED}[{:.10}{RED}]{RESET}',
+    'TIME'        : '{BLUE}{}{RESET}',
+    'URI'         : '{MAGENTA}[{}{MAGENTA}]{RESET}',
+    'NOTE'        : '{GRAY}[{}]{RESET}',
+    'HIDDEN'      : '{GRAY}******{RESET}',
+    'NONE'        : '',
+    'ADD'         : '{BGREEN}+ {RESET}',
+    'DEL'         : '{BRED}- {RESET}',
+    'LIST'        : '{DIFF}{TIME} {TAGS} {USERNAME} {PASSWORD} '
+                    '{DIGEST} {URI} {NOTE}\n'}
 
 #########################################
 #                                       #
@@ -142,21 +143,21 @@ FORMAT = {
 #                                       #
 #########################################
 
-VERSION = '9.7'
+VERSION = '10'
 YEAR    = '2022'
 
-CMD_CREATE  = 'create'
-CMD_CHPASS  = 'chpass'
-CMD_START   = 'start'
-CMD_STOP    = 'stop'
-CMD_DO      = 'do'
-CMD_ADD     = 'add'
-CMD_DEL     = 'del'
-CMD_MOD     = 'mod'
-CMD_LS      = 'ls'
-CMD_DIFF    = 'diff'
-CMD_COMMIT  = 'commit'
-CMD_REVERT  = 'revert'
+CMD_CREATE = 'create'
+CMD_CHPASS = 'chpass'
+CMD_START  = 'start'
+CMD_STOP   = 'stop'
+CMD_DO     = 'do'
+CMD_ADD    = 'add'
+CMD_DEL    = 'del'
+CMD_MOD    = 'mod'
+CMD_LS     = 'ls'
+CMD_DIFF   = 'diff'
+CMD_COMMIT = 'commit'
+CMD_DROP   = 'drop'
 
 ARG_INFO        = 'v'
 ARG_STDIN_INPUT = 's'
@@ -257,10 +258,11 @@ def find(db, query):
 def askpass(name, confirm=False, stdin=False):
     """prompts users for password"""
     f = input if stdin else getpass.getpass
-    pass1 = f(frmtstr(f'{name} password:', 'PROMPT'))
+    prompt = 'PROMPTSTDIN' if stdin else 'PROMPT'
+    pass1 = f(frmtstr(f'{name} password:', prompt))
     pass2 = pass1
     if confirm:
-        pass1 = f(frmtstr(f'confirm password:', 'PROMPT'))
+        pass1 = f(frmtstr(f'confirm password:', prompt))
     if pass1 == pass2:
         return pass1
     err('passwords mismatched')
@@ -366,13 +368,14 @@ def load_json(path):
             err(f'failed to decode json file "{path}"')
     sys.exit(1)
 
-def load_db(path, stdin):
+def load_db(path, stdin, password=None):
     """load database"""
     debug(f'loading "{path}"...')
     if not os.path.exists(path):
         err(f'database "{path}" not found.  did you create it?')
         sys.exit(1)
-    password = kdf(askpass('database', stdin=stdin))
+    if not password:
+        password = kdf(askpass('database', stdin=stdin))
     values = {'DATABASE_PATH' : path, 'DATABASE_PASSWORD' : password}
     data, err_msg = run(DECRYPT_COMMAND, values)
     if err_msg:
@@ -387,18 +390,15 @@ def load_db(path, stdin):
 
 def save_db(db, path, password):
     """save database"""
-    debug(f'saving database "{path}"...')
-    path_tmp = path + '.temp'
+    debug(f'saving to "{path}"...')
     data = json.dumps(db, indent=4)
-    values = {'DATABASE_PATH'     : path_tmp,
+    values = {'DATABASE_PATH'     : path,
               'DATABASE_PASSWORD' : password,
               'DATABASE_DATA'     : data}
     _, err_msg = run(ENCRYPT_COMMAND, values)
     if err_msg:
-        os.unlink(path_tmp)
         err(err_msg)
         sys.exit(1)
-    os.rename(path_tmp, path)
 
 def ipc_init(path):
     """prepares stuff needed for ipc"""
@@ -527,10 +527,11 @@ def ipc_ls(db, rargs):
         replies += ipc_entry(db, tags, showpass)
     return replies
 
-def ipc_diff(db, db_orig, password, password_orig, rargs):
+def ipc_diff(db_tmp, path_orig, password, password_orig, rargs):
     """implements `diff` sub-command"""
     info('diff')
     showpass = rargs[ARG_SHOWPASS]
+    db_orig, _ = load_db(path_orig, False, password_orig)
     replies = []
     for tags in db.keys() - db_orig.keys():
         replies += ipc_entry(db, tags, showpass, 'ADD')
@@ -543,7 +544,6 @@ def ipc_diff(db, db_orig, password, password_orig, rargs):
     if password != password_orig:
         passfrmt = frmtstr(password, 'PASSWORD', showpass)
         replies += ipc_warn(f'updated database password to {passfrmt}')
-    if not replies: replies += ipc_info('nothing to commit')
     return replies
 
 def handler_sigint(signum, frame):
@@ -586,10 +586,10 @@ allcmds = [
         {'help':'view entries'}],
     [CMD_DIFF, [ARG_STDIN_INPUT, ARG_SHOWPASS],
         {'help':'show modifications done so far'}],
-    [CMD_COMMIT, [ARG_STDIN_INPUT, ARG_DB_PATH],
+    [CMD_COMMIT, [ARG_STDIN_INPUT],
         {'help':'commit changes to the database'}],
-    [CMD_REVERT, [ARG_STDIN_INPUT],
-        {'help':'revert all uncommitted changed back to original'}],
+    [CMD_DROP, [ARG_STDIN_INPUT],
+        {'help':'discard all uncommitted changed'}],
 ]
 allargs = {
     ARG_QUERY   : {'metavar':'QUERY', 'type':str, 'nargs':'*',
@@ -620,7 +620,7 @@ allargs = {
     ARG_SHOWPASS    : {'action':'store_true', 'help':'show passwords'},
     ARG_STDIN_INPUT : {'action':'store_true', 'help':'input from stdin'},
     ARG_DB_PATH     : {'metavar':'DB', 'type':str,
-                        'help':'set passwords database path'}}
+                        'help':'set database path'}}
 parser = argparse.ArgumentParser()
 parser.add_argument('-' + ARG_INFO, action='store_true',
                     help='show information about nsapass')
@@ -664,8 +664,17 @@ signal.signal(signal.SIGALRM, handler_sigalrm)
 if args.command == CMD_START:
     ipc_init(ipc_server_path)
     path = args.d if args.d else DATABASE_PATH
-    db, password = load_db(path, args.s)
-    db_orig = {tags:dict(db[tags]) for tags in db}
+    path_tmp = path + '.temp'
+    if os.path.exists(path_tmp):
+        warn(f'found uncommitted changes from a previous session in "{path_tmp}"')
+        warn(f're-loading the uncommitted changes...')
+        db, password = load_db(path_tmp, args.s)
+        warn(f'execute:')
+        warn(f'  `{cmdname} {CMD_DIFF}` to see the uncommitted changes')
+        warn(f'  `{cmdname} {CMD_COMMIT}` to commit them')
+        warn(f'  `{cmdname} {CMD_DROP}` to discard them')
+    else:
+        db, password = load_db(path, args.s)
     password_orig = password
     last_do_query = None
     info('waiting for ipc commands...')
@@ -682,26 +691,40 @@ if args.command == CMD_START:
         if rcmd == CMD_CHPASS:
             info('updating database password...')
             password = kdf(rargs)
-            replies += ipc_info('database password updated')
+            save_db(db, path_tmp, password)
+            replies += ipc_info(
+                    'database password change staged')
         elif rcmd == CMD_DO :
             if rargs[0][ARG_QUERY]: last_do_query = rargs[0][ARG_QUERY]
             replies += ipc_do(db, last_do_query, rargs)
-        elif rcmd == CMD_ADD:   replies += ipc_add(db, rargs)
-        elif rcmd == CMD_DEL:   replies += ipc_del(db, rargs)
-        elif rcmd == CMD_MOD:   replies += ipc_mod(db, rargs)
-        elif rcmd == CMD_LS :   replies += ipc_ls(db, rargs)
-        elif rcmd == CMD_DIFF:  replies += ipc_diff(db, db_orig, password,
-                                                    password_orig, rargs)
+        elif rcmd == CMD_ADD:
+            replies += ipc_add(db, rargs)
+            save_db(db, path_tmp, password)
+        elif rcmd == CMD_DEL:
+            replies += ipc_del(db, rargs)
+            save_db(db, path_tmp, password)
+        elif rcmd == CMD_MOD:
+            replies += ipc_mod(db, rargs)
+            save_db(db, path_tmp, password)
+        elif rcmd == CMD_LS :
+            replies += ipc_ls(db, rargs)
+        elif rcmd == CMD_DIFF:
+            replies += ipc_diff(db, path, password, password_orig, rargs)
         elif rcmd == CMD_COMMIT:
-            info('commit')
-            if rargs: path = rargs
-            db_orig = dict(db)
-            save_db(db, path, password)
-            replies += ipc_info(f'database committed to "{path}"')
-        elif rcmd == CMD_REVERT:
-            info('revert')
-            db = dict(db_orig)
-            replies += ipc_info('reverted working database to original')
+            if not os.path.exists(path_tmp):
+                replies += ipc_warn('no changes to commit')
+            else:
+                debug(f'moving "{path_tmp}" to "{path}"...')
+                os.rename(path_tmp, path)
+                replies += ipc_info(f'changes committed to "{path}"')
+        elif rcmd == CMD_DROP:
+            if not os.path.exists(path_tmp):
+                replies += ipc_warn('no changes to drop')
+            else:
+                db, _ = load_db(path, False, password_orig)
+                debug(f'deleting "{path_tmp}"...')
+                os.unlink(path_tmp)
+                replies += ipc_info(f'changes dropped')
 
         # write replies back to client
         debug(f'writing to "{client_ipc_path}" ipc reply {replies}...')
@@ -774,7 +797,6 @@ ipc_init(ipc_client_path)
 if args.command == CMD_CHPASS: rargs = new_db_pass
 elif args.command in {CMD_ADD, CMD_MOD}:
     rargs = [vars(args), password, datab64s, digest]
-elif args.command == CMD_COMMIT: rargs = args.d
 elif args.command == CMD_DO: rargs = [vars(args), db_keys_list]
 else: rargs = vars(args)
 request = ipc_request(ipc_client_path, args.command, rargs)

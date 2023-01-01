@@ -1,5 +1,5 @@
 usage: nsa [-h] [-v] [-V] [-C] [-i DIR]
-           {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert} ...
+           {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,drop} ...
 
 options:
   -h, --help            show this help message and exit
@@ -9,7 +9,7 @@ options:
   -i DIR                ipc directory
 
 commands:
-  {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,revert}
+  {create,chpass,start,stop,do,add,del,mod,ls,diff,commit,drop}
     create              create a databases
     chpass              change databases's password
     start               starts nsapass
@@ -21,4 +21,4 @@ commands:
     ls                  view entries
     diff                show modifications done so far
     commit              commit changes to the database
-    revert              revert all uncommitted changed back to original
+    drop                discard all uncommitted changed
