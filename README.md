@@ -1,3 +1,13 @@
+# MIGRATED TO [_CODEBERG.ORG/CAVEMAN/NSAPASS_](https://github.com/Al-Caveman/nsapass)
+
+This repository is an outdated version of
+[nsapass](https://github.com/Al-Caveman/nsapass), and is kept only to link
+visitors to the [newer repository](https://github.com/Al-Caveman/nsapass).
+
+---
+---
+---
+
 # Synopsis
 _nsapass_ is the simplest, most usable and most secure
 [CLI](https://en.wikipedia.org/wiki/Command-line_interface) passwords
