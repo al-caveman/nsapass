@@ -1,8 +1,8 @@
-# MIGRATED TO [_CODEBERG.ORG/CAVEMAN/NSAPASS_](https://github.com/Al-Caveman/nsapass)
+# MIGRATED TO [_https://codeberg.org/caveman/nsapass_](https://codeberg.org/caveman/nsapass)
 
 This repository is an outdated version of
-[nsapass](https://github.com/Al-Caveman/nsapass), and is kept only to link
-visitors to the [newer repository](https://github.com/Al-Caveman/nsapass).
+[nsapass](https://codeberg.org/caveman/nsapass), and is kept only to link
+visitors to the [newer repository](https://codeberg.org/caveman/nsapass).
 
 ---
 ---
@@ -378,4 +378,5 @@ optional arguments:
 
 # Contact
 
-- Web: https://github.com/Al-Caveman/nsapass
+- Web: https://codeberg.org/caveman/nsapass
+
