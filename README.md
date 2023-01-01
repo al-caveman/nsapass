@@ -1,8 +1,6 @@
 # MIGRATED TO [_https://codeberg.org/caveman/nsapass_](https://codeberg.org/caveman/nsapass)
 
-This repository is an outdated version of
-[nsapass](https://codeberg.org/caveman/nsapass), and is kept only to link
-visitors to the [newer repository](https://codeberg.org/caveman/nsapass).
+## WARNING:  This repository is an outdated version of [nsapass](https://codeberg.org/caveman/nsapass), and is kept only to link visitors to migrate to the [newer repository](https://codeberg.org/caveman/nsapass).
 
 ---
 ---
